@@ -5,7 +5,9 @@ import (
 )
 
 // CenterOfGravity calculates the point of balance using a grid-based approximation.
-type CenterOfGravity struct{}
+type CenterOfGravity struct {
+	Resolution float64 // Optional: Resolution in meters. If 0, uses 200x200 grid.
+}
 
 func (m CenterOfGravity) Name() string { return "CenterOfGravity" }
 
@@ -22,18 +24,10 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 
 	for _, a := range areas {
 		for _, p := range a.Points {
-			if p.Lat < minLat {
-				minLat = p.Lat
-			}
-			if p.Lat > maxLat {
-				maxLat = p.Lat
-			}
-			if p.Lon < minLon {
-				minLon = p.Lon
-			}
-			if p.Lon > maxLon {
-				maxLon = p.Lon
-			}
+			if p.Lat < minLat { minLat = p.Lat }
+			if p.Lat > maxLat { maxLat = p.Lat }
+			if p.Lon < minLon { minLon = p.Lon }
+			if p.Lon > maxLon { maxLon = p.Lon }
 			sumElevBoundary += p.Elevation
 			pointCountBoundary++
 		}
@@ -44,16 +38,33 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 	}
 
 	// 2. Sample the bounding box with a grid
-	const resolution = 200 // 200x200 grid
-	stepLat := (maxLat - minLat) / float64(resolution)
-	stepLon := (maxLon - minLon) / float64(resolution)
+	var stepLat, stepLon float64
+	var latSteps, lonSteps int
+
+	if m.Resolution > 0 {
+		center := Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
+		pOffsetLat := Point{Lat: center.Lat + 0.001, Lon: center.Lon}
+		pOffsetLon := Point{Lat: center.Lat, Lon: center.Lon + 0.001}
+		mPerDegLat := center.DistanceTo(pOffsetLat) * 1000.0
+		mPerDegLon := center.DistanceTo(pOffsetLon) * 1000.0
+		stepLat = m.Resolution / mPerDegLat * 0.001
+		stepLon = m.Resolution / mPerDegLon * 0.001
+		latSteps = int((maxLat-minLat)/stepLat) + 1
+		lonSteps = int((maxLon-minLon)/stepLon) + 1
+	} else {
+		const res = 200
+		stepLat = (maxLat - minLat) / float64(res)
+		stepLon = (maxLon - minLon) / float64(res)
+		latSteps = res
+		lonSteps = res
+	}
 
 	var sumLat, sumLon float64
 	countInside := 0
 
-	for i := 0; i < resolution; i++ {
+	for i := 0; i < latSteps; i++ {
 		lat := minLat + (float64(i)+0.5)*stepLat
-		for j := 0; j < resolution; j++ {
+		for j := 0; j < lonSteps; j++ {
 			lon := minLon + (float64(j)+0.5)*stepLon
 
 			// Check if (lat, lon) is inside ANY area

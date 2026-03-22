@@ -18,6 +18,7 @@ func main() {
 	inputDir := flag.String("input", "", "Directory containing ESRI Shapefiles")
 	outputDir := flag.String("output", ".", "Output directory")
 	filterNames := flag.String("filter", "", "Comma-separated list of area names to include")
+	resolution := flag.Float64("resolution", 100.0, "Resolution in meters for grid-based methods (default 100m for speed)")
 	flag.Parse()
 
 	if *inputDir == "" {
@@ -106,8 +107,11 @@ func main() {
 	calcMethods := []methods.CalculationMethod{
 		methods.BoundingBoxCenter{},
 		methods.IntersectionOfOutermost{},
-		methods.CenterOfGravity{},
+		methods.CenterOfGravity{Resolution: *resolution},
 		methods.MinimalDistanceSum{},
+		methods.RotatingBoundingBoxCenter{},
+		methods.MinimalDistanceSumEqualSpaced{},
+		methods.ReliefCenterOfGravity{Resolution: *resolution},
 	}
 
 	var middlePoints []methods.Point
