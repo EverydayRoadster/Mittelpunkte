@@ -113,6 +113,7 @@ func main() {
 		methods.MinimalDistanceSumEqualSpaced{},
 		methods.ReliefCenterOfGravity{Resolution: *resolution},
 		methods.FermatPointF1{Resolution: *resolution},
+		methods.CenterOfMassSquared{Resolution: *resolution},
 	}
 
 	var middlePoints []methods.Point
