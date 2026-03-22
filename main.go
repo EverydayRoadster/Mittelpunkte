@@ -8,124 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/falk/mittelpunkte/methods"
 	"github.com/jonas-p/go-shp"
 	"github.com/paulmach/go.geojson"
 	"github.com/tkrajina/gpxgo/gpx"
 )
-
-// Point represents a geographical point with elevation.
-type Point struct {
-	Lat       float64
-	Lon       float64
-	Elevation float64
-	Method    string
-}
-
-// Area represents a named set of points (e.g., a village boundary).
-type Area struct {
-	Name   string
-	Points []Point
-}
-
-// CalculationMethod is the interface for different middle point calculation methods.
-type CalculationMethod interface {
-	Name() string
-	Calculate(points []Point) Point
-}
-
-// BoundingBoxCenter calculates the average between maximum and minimum lat and lon.
-type BoundingBoxCenter struct{}
-
-func (m BoundingBoxCenter) Name() string { return "BoundingBoxCenter" }
-
-func (m BoundingBoxCenter) Calculate(points []Point) Point {
-	if len(points) == 0 {
-		return Point{}
-	}
-	minLat, maxLat := points[0].Lat, points[0].Lat
-	minLon, maxLon := points[0].Lon, points[0].Lon
-	sumElev := 0.0
-
-	for _, p := range points {
-		if p.Lat < minLat {
-			minLat = p.Lat
-		}
-		if p.Lat > maxLat {
-			maxLat = p.Lat
-		}
-		if p.Lon < minLon {
-			minLon = p.Lon
-		}
-		if p.Lon > maxLon {
-			maxLon = p.Lon
-		}
-		sumElev += p.Elevation
-	}
-
-	return Point{
-		Lat:       (minLat + maxLat) / 2.0,
-		Lon:       (minLon + maxLon) / 2.0,
-		Elevation: sumElev / float64(len(points)),
-		Method:    m.Name(),
-	}
-}
-
-// IntersectionOfOutermost calculates the intersection of lines between the outermost points of lat and lon.
-type IntersectionOfOutermost struct{}
-
-func (m IntersectionOfOutermost) Name() string { return "IntersectionOfOutermost" }
-
-func (m IntersectionOfOutermost) Calculate(points []Point) Point {
-	if len(points) == 0 {
-		return Point{}
-	}
-
-	var pMinLat, pMaxLat, pMinLon, pMaxLon Point
-	pMinLat = points[0]
-	pMaxLat = points[0]
-	pMinLon = points[0]
-	pMaxLon = points[0]
-	sumElev := 0.0
-
-	for _, p := range points {
-		if p.Lat < pMinLat.Lat {
-			pMinLat = p
-		}
-		if p.Lat > pMaxLat.Lat {
-			pMaxLat = p
-		}
-		if p.Lon < pMinLon.Lon {
-			pMinLon = p
-		}
-		if p.Lon > pMaxLon.Lon {
-			pMaxLon = p
-		}
-		sumElev += p.Elevation
-	}
-
-	// Line 1: pMinLat to pMaxLat
-	// Line 2: pMinLon to pMaxLon
-	x1, y1 := pMinLat.Lon, pMinLat.Lat
-	x2, y2 := pMaxLat.Lon, pMaxLat.Lat
-	x3, y3 := pMinLon.Lon, pMinLon.Lat
-	x4, y4 := pMaxLon.Lon, pMaxLon.Lat
-
-	denom := (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4)
-	if denom == 0 {
-		// Parallel lines, fallback to bounding box center for this case
-		return BoundingBoxCenter{}.Calculate(points)
-	}
-
-	intersectX := ((x1*y2-y1*x2)*(x3-x4) - (x1-x2)*(x3*y4-y3*x4)) / denom
-	intersectY := ((x1*y2-y1*x2)*(y3-y4) - (y1-y2)*(x3*y4-y3*x4)) / denom
-
-	return Point{
-		Lat:       intersectY,
-		Lon:       intersectX,
-		Elevation: sumElev / float64(len(points)),
-		Method:    m.Name(),
-	}
-}
 
 func main() {
 	inputDir := flag.String("input", "", "Directory containing ESRI Shapefiles")
@@ -163,7 +50,7 @@ func main() {
 		log.Fatalf("Could not read input directory: %v", err)
 	}
 
-	var allAreas []Area
+	var allAreas []methods.Area
 	for _, file := range files {
 		if strings.ToLower(filepath.Ext(file.Name())) == ".shp" {
 			shpPath := filepath.Join(absInputDir, file.Name())
@@ -181,7 +68,7 @@ func main() {
 	}
 
 	// Filter areas if requested
-	var selectedAreas []Area
+	var selectedAreas []methods.Area
 	if *filterNames != "" {
 		filters := strings.Split(*filterNames, ",")
 		for i := range filters {
@@ -215,21 +102,17 @@ func main() {
 	saveGeoJSON(filepath.Join(finalOutputDir, "areas.geojson"), selectedAreas)
 	saveGPX(filepath.Join(finalOutputDir, "areas.gpx"), selectedAreas)
 
-	// Collect all points for middle point calculation
-	var allPoints []Point
-	for _, area := range selectedAreas {
-		allPoints = append(allPoints, area.Points...)
-	}
-
 	// Calculate middle points
-	methods := []CalculationMethod{
-		BoundingBoxCenter{},
-		IntersectionOfOutermost{},
+	calcMethods := []methods.CalculationMethod{
+		methods.BoundingBoxCenter{},
+		methods.IntersectionOfOutermost{},
+		methods.CenterOfGravity{},
+		methods.MinimalDistanceSum{},
 	}
 
-	var middlePoints []Point
-	for _, method := range methods {
-		mp := method.Calculate(allPoints)
+	var middlePoints []methods.Point
+	for _, method := range calcMethods {
+		mp := method.Calculate(selectedAreas)
 		middlePoints = append(middlePoints, mp)
 		fmt.Printf("Method %s: Lat %.6f, Lon %.6f\n", mp.Method, mp.Lat, mp.Lon)
 	}
@@ -239,7 +122,7 @@ func main() {
 	saveMiddlePointsGPX(filepath.Join(finalOutputDir, "middle_points.gpx"), middlePoints)
 }
 
-func readShapefile(path string) ([]Area, error) {
+func readShapefile(path string) ([]methods.Area, error) {
 	s, err := shp.Open(path)
 	if err != nil {
 		return nil, err
@@ -266,7 +149,7 @@ func readShapefile(path string) ([]Area, error) {
 		}
 	}
 
-	var areas []Area
+	var areas []methods.Area
 	for s.Next() {
 		idx, shape := s.Shape()
 		
@@ -278,7 +161,7 @@ func readShapefile(path string) ([]Area, error) {
 			}
 		}
 
-		var points []Point
+		var points []methods.Point
 		switch shpObj := shape.(type) {
 		case *shp.Point:
 			points = append(points, convertPoint(shpObj.X, shpObj.Y, 0, isSwiss))
@@ -303,14 +186,14 @@ func readShapefile(path string) ([]Area, error) {
 		}
 
 		if len(points) > 0 {
-			areas = append(areas, Area{Name: name, Points: points})
+			areas = append(areas, methods.Area{Name: name, Points: points})
 		}
 	}
 
 	return areas, nil
 }
 
-func convertPoint(x, y, z float64, isSwiss bool) Point {
+func convertPoint(x, y, z float64, isSwiss bool) methods.Point {
 	if isSwiss {
 		y_aux := (x - 2600000) / 1000000
 		x_aux := (y - 1200000) / 1000000
@@ -331,12 +214,12 @@ func convertPoint(x, y, z float64, isSwiss bool) Point {
 		lon := lonUnit * 100 / 36
 		lat := latUnit * 100 / 36
 
-		return Point{Lat: lat, Lon: lon, Elevation: z}
+		return methods.Point{Lat: lat, Lon: lon, Elevation: z}
 	}
-	return Point{Lat: y, Lon: x, Elevation: z}
+	return methods.Point{Lat: y, Lon: x, Elevation: z}
 }
 
-func saveGeoJSON(path string, areas []Area) {
+func saveGeoJSON(path string, areas []methods.Area) {
 	fc := geojson.NewFeatureCollection()
 	for _, a := range areas {
 		coords := make([][]float64, len(a.Points))
@@ -351,7 +234,7 @@ func saveGeoJSON(path string, areas []Area) {
 	os.WriteFile(path, data, 0644)
 }
 
-func saveGPX(path string, areas []Area) {
+func saveGPX(path string, areas []methods.Area) {
 	g := &gpx.GPX{}
 	for _, a := range areas {
 		trk := gpx.GPXTrack{Name: a.Name}
@@ -372,7 +255,7 @@ func saveGPX(path string, areas []Area) {
 	os.WriteFile(path, xml, 0644)
 }
 
-func saveMiddlePointsGeoJSON(path string, points []Point) {
+func saveMiddlePointsGeoJSON(path string, points []methods.Point) {
 	fc := geojson.NewFeatureCollection()
 	for _, p := range points {
 		f := geojson.NewPointFeature([]float64{p.Lon, p.Lat, p.Elevation})
@@ -384,7 +267,7 @@ func saveMiddlePointsGeoJSON(path string, points []Point) {
 	os.WriteFile(path, data, 0644)
 }
 
-func saveMiddlePointsGPX(path string, points []Point) {
+func saveMiddlePointsGPX(path string, points []methods.Point) {
 	g := &gpx.GPX{}
 	for _, p := range points {
 		wpt := gpx.GPXPoint{
