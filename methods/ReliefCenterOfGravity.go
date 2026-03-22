@@ -23,97 +23,58 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 
 	res := m.Resolution
 	if res == 0 {
-		res = 10.0 // Default to 10m
+		res = 30.0 // Default
 	}
 
-	// 1. Determine bounding box
-	minLat, maxLat := math.MaxFloat64, -math.MaxFloat64
-	minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
-	for _, a := range areas {
-		for _, p := range a.Points {
-			if p.Lat < minLat { minLat = p.Lat }
-			if p.Lat > maxLat { maxLat = p.Lat }
-			if p.Lon < minLon { minLon = p.Lon }
-			if p.Lon > maxLon { maxLon = p.Lon }
-		}
-	}
-
-	// 2. Determine degree steps for the resolution
-	// Use a point in the center to estimate
-	center := Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
-	pOffsetLat := Point{Lat: center.Lat + 0.001, Lon: center.Lon}
-	pOffsetLon := Point{Lat: center.Lat, Lon: center.Lon + 0.001}
-	
-	mPerDegLat := center.DistanceTo(pOffsetLat) * 1000.0
-	mPerDegLon := center.DistanceTo(pOffsetLon) * 1000.0
-	
-	stepLat := res / mPerDegLat * 0.001
-	stepLon := res / mPerDegLon * 0.001
-
-	// 3. Generate grid points inside areas
-	var gridPoints []Point
-	latSteps := int((maxLat-minLat)/stepLat) + 1
-	lonSteps := int((maxLon-minLon)/stepLon) + 1
-
-	fmt.Printf("Generating %dx%d grid (approx %d points)...\n", latSteps, lonSteps, latSteps*lonSteps)
-
-	for i := 0; i < latSteps; i++ {
-		lat := minLat + float64(i)*stepLat
-		for j := 0; j < lonSteps; j++ {
-			lon := minLon + float64(j)*stepLon
-			
-			inside := false
-			for _, a := range areas {
-				if isPointInPolygon(lat, lon, a.Points) {
-					inside = true
-					break
-				}
-			}
-			if inside {
-				gridPoints = append(gridPoints, Point{Lat: lat, Lon: lon})
-			}
-		}
-	}
-
+	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
 		return Point{}
 	}
 
 	fmt.Printf("Fetching elevation for %d points inside the area...\n", len(gridPoints))
 	
-	// 4. Fetch elevations (batched)
+	// Fetch elevations (batched)
 	elevations, err := fetchElevations(gridPoints)
 	if err != nil {
 		fmt.Printf("Warning: Could not fetch elevations: %v. Falling back to 2D CenterOfGravity.\n", err)
-		return CenterOfGravity{}.Calculate(areas)
+		return CenterOfGravity{Resolution: res}.Calculate(areas)
 	}
 
-	// 5. Calculate weighted center of gravity
-	// Weight is the surface area. For a simple approximation on a grid,
-	// we use w = sqrt(1 + dz/dx^2 + dz/dy^2).
-	// To simplify, we'll use a local gradient approximation or just weight by elevation
-	// if we assume constant density of the "shell".
-	// Actually, a more physical "balance point" for a 3D shell uses the surface area.
-	
+	// Calculate weighted center of gravity
 	var sumLat, sumLon, sumWeight, sumElev float64
+	
+	minLat, _ := math.MaxFloat64, -math.MaxFloat64
+	for _, a := range areas {
+		for _, p := range a.Points {
+			if p.Lat < minLat { minLat = p.Lat }
+		}
+	}
 	
 	// Map points to their elevations for easy lookup
 	type key struct{ i, j int }
 	elevMap := make(map[key]float64)
-	// We need to re-index gridPoints to i, j to find neighbors
+	
+	// Re-estimate steps to re-index
+	center := Point{Lat: gridPoints[0].Lat, Lon: gridPoints[0].Lon}
+	pOffsetLat := Point{Lat: center.Lat + 0.1, Lon: center.Lon}
+	pOffsetLon := Point{Lat: center.Lat, Lon: center.Lon + 0.1}
+	mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
+	mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
+	stepLat := res / mPerDegLat
+	stepLon := res / mPerDegLon
+
 	for idx, p := range gridPoints {
 		i := int((p.Lat - minLat) / stepLat + 0.5)
-		j := int((p.Lon - minLon) / stepLon + 0.5)
+		j := int(p.Lon / stepLon + 0.5) // Simplified key
 		elevMap[key{i, j}] = elevations[idx]
 	}
 
 	for idx, p := range gridPoints {
 		i := int((p.Lat - minLat) / stepLat + 0.5)
-		j := int((p.Lon - minLon) / stepLon + 0.5)
+		j := int(p.Lon / stepLon + 0.5)
 		
 		z := elevations[idx]
 		
-		// Estimate gradients
 		var dzdx, dzdy float64
 		if zNext, ok := elevMap[key{i + 1, j}]; ok {
 			dzdx = (zNext - z) / res
@@ -138,12 +99,7 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 	}
 }
 
-type openTopoResponse struct {
-	Results []struct {
-		Elevation float64 `json:"elevation"`
-	} `json:"results"`
-}
-
+// ... fetchElevations and openTopoResponse remain same ...
 func fetchElevations(points []Point) ([]float64, error) {
 	elevations := make([]float64, len(points))
 	batchSize := 100
@@ -167,7 +123,11 @@ func fetchElevations(points []Point) ([]float64, error) {
 			return nil, err
 		}
 		
-		var data openTopoResponse
+		var data struct {
+			Results []struct {
+				Elevation float64 `json:"elevation"`
+			} `json:"results"`
+		}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 			resp.Body.Close()
 			return nil, err
@@ -178,7 +138,6 @@ func fetchElevations(points []Point) ([]float64, error) {
 			elevations[i+j] = res.Elevation
 		}
 		
-		// Respect rate limits of public API
 		if i+batchSize < len(points) {
 			time.Sleep(1000 * time.Millisecond)
 		}

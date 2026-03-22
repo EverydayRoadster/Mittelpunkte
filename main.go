@@ -18,7 +18,7 @@ func main() {
 	inputDir := flag.String("input", "", "Directory containing ESRI Shapefiles")
 	outputDir := flag.String("output", ".", "Output directory")
 	filterNames := flag.String("filter", "", "Comma-separated list of area names to include")
-	resolution := flag.Float64("resolution", 100.0, "Resolution in meters for grid-based methods (default 100m for speed)")
+	resolution := flag.Float64("resolution", 30.0, "Resolution in meters for grid-based methods (default 30m for speed)")
 	flag.Parse()
 
 	if *inputDir == "" {
@@ -112,6 +112,7 @@ func main() {
 		methods.RotatingBoundingBoxCenter{},
 		methods.MinimalDistanceSumEqualSpaced{},
 		methods.ReliefCenterOfGravity{Resolution: *resolution},
+		methods.FermatPointF1{Resolution: *resolution},
 	}
 
 	var middlePoints []methods.Point
