@@ -1,5 +1,9 @@
 package methods
 
+import (
+	"fmt"
+)
+
 // IntersectionOfOutermost calculates the intersection of lines between the outermost points of lat and lon.
 type IntersectionOfOutermost struct{}
 
@@ -58,6 +62,35 @@ func (m IntersectionOfOutermost) Calculate(areas []Area) Point {
 		Lat:       intersectY,
 		Lon:       intersectX,
 		Elevation: sumElev / float64(len(points)),
-		Method:    m.Name(),
+		Method:    intersectMethodName(m.Name()),
 	}
+}
+
+func intersectMethodName(name string) string { return name }
+
+func (m IntersectionOfOutermost) SVG(areas []Area, p Point, t SVGTransformer) string {
+	var points []Point
+	for _, a := range areas {
+		points = append(points, a.Points...)
+	}
+	if len(points) == 0 {
+		return ""
+	}
+	var pMinLat, pMaxLat, pMinLon, pMaxLon Point
+	pMinLat, pMaxLat, pMinLon, pMaxLon = points[0], points[0], points[0], points[0]
+	for _, pt := range points {
+		if pt.Lat < pMinLat.Lat { pMinLat = pt }
+		if pt.Lat > pMaxLat.Lat { pMaxLat = pt }
+		if pt.Lon < pMinLon.Lon { pMinLon = pt }
+		if pt.Lon > pMaxLon.Lon { pMaxLon = pt }
+	}
+
+	x1, y1 := t.Project(pMinLat)
+	x2, y2 := t.Project(pMaxLat)
+	x3, y3 := t.Project(pMinLon)
+	x4, y4 := t.Project(pMaxLon)
+
+	return fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="red" stroke-width="2" />`+
+		`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="red" stroke-width="2" />`,
+		x1, y1, x2, y2, x3, y3, x4, y4)
 }

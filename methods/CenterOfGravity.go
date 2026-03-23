@@ -1,7 +1,9 @@
 package methods
 
 import (
+	"fmt"
 	"math"
+	"strings"
 )
 
 // CenterOfGravity calculates the point of balance using a grid-based approximation.
@@ -68,4 +70,24 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 		Lon:    sumLon / float64(len(gridPoints)),
 		Method: m.Name(),
 	}
+}
+
+func (m CenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) string {
+	res := m.Resolution
+	if res <= 0 {
+		res = 100.0 // Larger resolution for visualization to avoid huge SVGs
+	}
+	gridPoints := GenerateGridPoints(areas, res)
+	if len(gridPoints) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for i, gp := range gridPoints {
+		// Limit to ~1000 dots for performance
+		if len(gridPoints) > 1000 && i%(len(gridPoints)/1000) != 0 { continue }
+		x, y := t.Project(gp)
+		sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="1" fill="blue" fill-opacity="0.3" />`, x, y))
+	}
+	return sb.String()
 }

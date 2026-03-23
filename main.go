@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,6 +135,81 @@ func main() {
 	// Save middle points
 	saveMiddlePointsGeoJSON(filepath.Join(finalOutputDir, "middle_points.geojson"), middlePoints)
 	saveMiddlePointsGPX(filepath.Join(finalOutputDir, "middle_points.gpx"), middlePoints)
+
+	// Save SVGs
+	saveSVGs(finalOutputDir, selectedAreas, calcMethods, middlePoints)
+}
+
+func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.CalculationMethod, results []methods.Point) {
+	if len(areas) == 0 {
+		return
+	}
+
+	// Calculate overall bounding box
+	minLat, maxLat := math.MaxFloat64, -math.MaxFloat64
+	minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
+	for _, a := range areas {
+		for _, p := range a.Points {
+			if p.Lat < minLat { minLat = p.Lat }
+			if p.Lat > maxLat { maxLat = p.Lat }
+			if p.Lon < minLon { minLon = p.Lon }
+			if p.Lon > maxLon { maxLon = p.Lon }
+		}
+	}
+
+	// Add 5% padding
+	latPad := (maxLat - minLat) * 0.05
+	lonPad := (maxLon - minLon) * 0.05
+	if latPad == 0 { latPad = 0.01 }
+	if lonPad == 0 { lonPad = 0.01 }
+
+	width := 800.0
+	height := width * (maxLat - minLat + 2*latPad) / (maxLon - minLon + 2*lonPad)
+	if height > 1200 {
+		height = 1200
+		width = height * (maxLon - minLon + 2*lonPad) / (maxLat - minLat + 2*latPad)
+	}
+
+	t := methods.SVGTransformer{
+		MinLat: minLat - latPad, MaxLat: maxLat + latPad,
+		MinLon: minLon - lonPad, MaxLon: maxLon + lonPad,
+		Width: width, Height: height,
+	}
+
+	// Generate base polygon paths
+	var basePaths []string
+	for _, a := range areas {
+		var points []string
+		for _, p := range a.Points {
+			x, y := t.Project(p)
+			points = append(points, fmt.Sprintf("%.2f,%.2f", x, y))
+		}
+		basePaths = append(basePaths, fmt.Sprintf(`<polygon points="%s" fill="#f0f0f0" stroke="#ccc" stroke-width="1" />`,
+			strings.Join(points, " ")))
+	}
+	baseSVG := strings.Join(basePaths, "\n")
+
+	for i, method := range calcMethods {
+		res := results[i]
+		methodSVG := method.SVG(areas, res, t)
+		
+		// Final center point marker
+		cx, cy := t.Project(res)
+		markerSVG := fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="4" fill="red" stroke="white" stroke-width="1" />`+
+			`<text x="%.2f" y="%.2f" font-family="sans-serif" font-size="12" fill="black" dy="-10" text-anchor="middle">%s</text>`,
+			cx, cy, cx, cy, method.Name())
+
+		fullSVG := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" xmlns="http://www.w3.org/2000/svg">
+	<rect width="100%%" height="100%%" fill="white" />
+	%s
+	%s
+	%s
+</svg>`, width, height, width, height, baseSVG, methodSVG, markerSVG)
+
+		filename := filepath.Join(dir, fmt.Sprintf("%s.svg", method.Name()))
+		os.WriteFile(filename, []byte(fullSVG), 0644)
+	}
 }
 
 func readShapefile(path string) ([]methods.Area, error) {

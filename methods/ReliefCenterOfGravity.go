@@ -23,7 +23,7 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 
 	res := m.Resolution
 	if res == 0 {
-		res = 30.0 // Default
+		res = 100.0 // Default
 	}
 
 	gridPoints := GenerateGridPoints(areas, res)
@@ -97,6 +97,13 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 		Elevation: sumElev / sumWeight,
 		Method:    m.Name(),
 	}
+}
+
+func (m ReliefCenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) string {
+	cx, cy := t.Project(p)
+	// Draw a star shape
+	return fmt.Sprintf(`<path d="M %f,%f l 2,-5 l 2,5 l 5,0 l -4,3 l 2,5 l -5,-3 l -5,3 l 2,-5 l -4,-3 z" fill="yellow" stroke="orange" stroke-width="1" />`,
+		cx, cy)
 }
 
 // ... fetchElevations and openTopoResponse remain same ...

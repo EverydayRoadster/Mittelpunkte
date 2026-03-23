@@ -1,7 +1,9 @@
 package methods
 
 import (
+	"fmt"
 	"math"
+	"strings"
 )
 
 // MinimalDistanceSum calculates the point that minimizes the sum of distances to all border points.
@@ -79,6 +81,19 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 	curr.Elevation = avgElev
 	curr.Method = m.Name()
 	return curr
+}
+
+func (m MinimalDistanceSum) SVG(areas []Area, p Point, t SVGTransformer) string {
+	var sb strings.Builder
+	cx, cy := t.Project(p)
+	for _, a := range areas {
+		for i, pt := range a.Points {
+			if i%5 != 0 { continue } // Only draw some lines to avoid mess
+			px, py := t.Project(pt)
+			sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`, cx, cy, px, py))
+		}
+	}
+	return sb.String()
 }
 
 func dist(p1, p2 Point) float64 {

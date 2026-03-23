@@ -36,7 +36,35 @@ type Area struct {
 type CalculationMethod interface {
 	Name() string
 	Calculate(areas []Area) Point
+	SVG(areas []Area, p Point, t SVGTransformer) string
 }
+
+// SVGTransformer handles projection of Lat/Lon to SVG coordinates.
+type SVGTransformer struct {
+	MinLat, MaxLat float64
+	MinLon, MaxLon float64
+	Width, Height  float64
+}
+
+// Project converts a geographical point to SVG coordinates.
+func (t SVGTransformer) Project(p Point) (float64, float64) {
+	if t.MaxLon == t.MinLon || t.MaxLat == t.MinLat {
+		return 0, 0
+	}
+	x := (p.Lon - t.MinLon) / (t.MaxLon - t.MinLon) * t.Width
+	y := (1.0 - (p.Lat-t.MinLat)/(t.MaxLat-t.MinLat)) * t.Height
+	return x, y
+}
+
+// ProjectRadius converts a distance in meters to SVG units (approximate).
+func (t SVGTransformer) ProjectRadius(meters float64, center Point) float64 {
+	p2 := Point{Lat: center.Lat, Lon: center.Lon + 0.01}
+	dist := center.DistanceTo(p2)
+	degPerMeter := 0.01 / dist
+	lonRange := t.MaxLon - t.MinLon
+	return (meters * degPerMeter / lonRange) * t.Width
+}
+
 
 // GenerateGridPoints generates a grid of points inside the provided areas based on resolution in meters.
 func GenerateGridPoints(areas []Area, resolution float64) []Point {

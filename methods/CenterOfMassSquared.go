@@ -1,6 +1,7 @@
 package methods
 
 import (
+	"fmt"
 	"math"
 )
 
@@ -49,4 +50,10 @@ func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 
 	bestPoint.Method = m.Name()
 	return bestPoint
+}
+
+func (m CenterOfMassSquared) SVG(areas []Area, p Point, t SVGTransformer) string {
+	cx, cy := t.Project(p)
+	return fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="5" fill="none" stroke="magenta" stroke-width="2" />`+
+		`<circle cx="%.2f" cy="%.2f" r="1" fill="magenta" />`, cx, cy, cx, cy)
 }

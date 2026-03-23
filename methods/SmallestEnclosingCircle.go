@@ -1,6 +1,8 @@
 package methods
 
 import (
+	"fmt"
+	"math"
 	"math/rand"
 )
 
@@ -21,7 +23,7 @@ func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
 		return Point{}
 	}
 
-	c := welzl(points)
+	c := m.calculateSEC(points)
 
 	// Elevation is average of all points
 	sumElev := 0.0
@@ -29,100 +31,150 @@ func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
 		sumElev += p.Elevation
 	}
 
-	return Point{
-		Lat:       c.center.Lat,
-		Lon:       c.center.Lon,
-		Elevation: sumElev / float64(len(points)),
-		Method:    m.Name(),
+	res := c.center
+	res.Elevation = sumElev / float64(len(points))
+	res.Method = m.Name()
+	return res
+}
+
+func (m SmallestEnclosingCircle) SVG(areas []Area, p Point, t SVGTransformer) string {
+	var points []Point
+	for _, a := range areas {
+		points = append(points, a.Points...)
 	}
+	if len(points) == 0 {
+		return ""
+	}
+
+	c := m.calculateSEC(points)
+	cx, cy := t.Project(c.center)
+	r := t.ProjectRadius(c.radius, c.center)
+
+	return fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="%.2f" fill="orange" fill-opacity="0.1" stroke="orange" stroke-width="2" />`, cx, cy, r)
+}
+
+type vec2 struct{ x, y float64 }
+type cartCircle struct {
+	center vec2
+	radSq  float64
+}
+
+func (m SmallestEnclosingCircle) calculateSEC(points []Point) circle {
+	if len(points) == 0 {
+		return circle{}
+	}
+
+	// Reference point for local projection (use the average to minimize distortion)
+	var avgLat, avgLon float64
+	for _, p := range points {
+		avgLat += p.Lat
+		avgLon += p.Lon
+	}
+	ref := Point{Lat: avgLat / float64(len(points)), Lon: avgLon / float64(len(points))}
+
+	const R = 6371000.0
+	const rad = math.Pi / 180.0
+	toLocal := func(p Point) vec2 {
+		y := (p.Lat - ref.Lat) * rad * R
+		x := (p.Lon - ref.Lon) * rad * R * math.Cos(ref.Lat*rad)
+		return vec2{x, y}
+	}
+	fromLocal := func(v vec2) Point {
+		lat := ref.Lat + (v.y / R / rad)
+		lon := ref.Lon + (v.x / R / rad / math.Cos(ref.Lat*rad))
+		return Point{Lat: lat, Lon: lon}
+	}
+
+	localPoints := make([]vec2, len(points))
+	for i, p := range points {
+		localPoints[i] = toLocal(p)
+	}
+
+	// Shuffle for O(N) performance
+	shuffled := make([]vec2, len(localPoints))
+	copy(shuffled, localPoints)
+	rng := rand.New(rand.NewSource(42))
+	rng.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	var welzl func(int, []vec2) cartCircle
+	welzl = func(n int, bnd []vec2) cartCircle {
+		if n == 0 || len(bnd) == 3 {
+			return minidiskWithBoundary(bnd)
+		}
+
+		p := shuffled[n-1]
+		D := welzl(n-1, bnd)
+
+		if distSq(p, D.center) <= D.radSq+1e-7 {
+			return D
+		}
+
+		// Point p must be on the boundary
+		newBnd := make([]vec2, len(bnd)+1)
+		copy(newBnd, bnd)
+		newBnd[len(bnd)] = p
+		return welzl(n-1, newBnd)
+	}
+
+	res := welzl(len(shuffled), nil)
+
+	return circle{
+		center: fromLocal(res.center),
+		radius: math.Sqrt(res.radSq),
+	}
+}
+
+func distSq(v1, v2 vec2) float64 {
+	dx, dy := v1.x-v2.x, v1.y-v2.y
+	return dx*dx + dy*dy
+}
+
+func minidiskWithBoundary(bnd []vec2) cartCircle {
+	switch len(bnd) {
+	case 0:
+		return cartCircle{vec2{0, 0}, 0}
+	case 1:
+		return cartCircle{bnd[0], 0}
+	case 2:
+		p1, p2 := bnd[0], bnd[1]
+		center := vec2{(p1.x + p2.x) / 2, (p1.y + p2.y) / 2}
+		return cartCircle{center, distSq(p1, center)}
+	case 3:
+		return circumcircle(bnd[0], bnd[1], bnd[2])
+	}
+	return cartCircle{}
+}
+
+func circumcircle(p1, p2, p3 vec2) cartCircle {
+	x1, y1 := p1.x, p1.y
+	x2, y2 := p2.x, p2.y
+	x3, y3 := p3.x, p3.y
+	D := 2 * (x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2))
+	if math.Abs(D) < 1e-7 {
+		// Collinear points, SEC is defined by the two furthest apart
+		d12 := distSq(p1, p2)
+		d13 := distSq(p1, p3)
+		d23 := distSq(p2, p3)
+		if d12 >= d13 && d12 >= d23 {
+			center := vec2{(p1.x + p2.x) / 2, (p1.y + p2.y) / 2}
+			return cartCircle{center, distSq(p1, center)}
+		}
+		if d13 >= d12 && d13 >= d23 {
+			center := vec2{(p1.x + p3.x) / 2, (p1.y + p3.y) / 2}
+			return cartCircle{center, distSq(p1, center)}
+		}
+		center := vec2{(p2.x + p3.x) / 2, (p2.y + p3.y) / 2}
+		return cartCircle{center, distSq(p2, center)}
+	}
+	ux := ((x1*x1+y1*y1)*(y2-y3) + (x2*x2+y2*y2)*(y3-y1) + (x3*x3+y3*y3)*(y1-y2)) / D
+	uy := ((x1*x1+y1*y1)*(x3-x2) + (x2*x2+y2*y2)*(x1-x3) + (x3*x3+y3*y3)*(x2-x1)) / D
+	center := vec2{ux, uy}
+	return cartCircle{center, distSq(p1, center)}
 }
 
 type circle struct {
 	center Point
 	radius float64
-}
-
-func welzl(points []Point) circle {
-	shuffled := make([]Point, len(points))
-	copy(shuffled, points)
-	rand.Shuffle(len(shuffled), func(i, j int) {
-		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-	})
-
-	c := circle{center: shuffled[0], radius: 0}
-
-	for i := 1; i < len(shuffled); i++ {
-		if shuffled[i].DistanceTo(c.center) > c.radius+1e-7 {
-			c = welzlWithPoint(shuffled[:i], shuffled[i])
-		}
-	}
-
-	return c
-}
-
-func welzlWithPoint(points []Point, q Point) circle {
-	c := circleFromTwoPoints(points[0], q) // Base case with 2 points
-
-	// For small i, we might need a 1-point base case
-	if len(points) == 0 {
-		return circle{center: q, radius: 0}
-	}
-	
-	c = circleFromTwoPoints(points[0], q)
-
-	for i := 0; i < len(points); i++ {
-		if points[i].DistanceTo(c.center) > c.radius+1e-7 {
-			c = welzlWithTwoPoints(points[:i], points[i], q)
-		}
-	}
-	return c
-}
-
-func welzlWithTwoPoints(points []Point, q1, q2 Point) circle {
-	c := circleFromTwoPoints(q1, q2)
-
-	for i := 0; i < len(points); i++ {
-		if points[i].DistanceTo(c.center) > c.radius+1e-7 {
-			c = circleFromThreePoints(q1, q2, points[i])
-		}
-	}
-	return c
-}
-
-
-func circleFromTwoPoints(p1, p2 Point) circle {
-	center := Point{
-		Lat: (p1.Lat + p2.Lat) / 2,
-		Lon: (p1.Lon + p2.Lon) / 2,
-	}
-	return circle{center: center, radius: p1.DistanceTo(center)}
-}
-
-func circleFromThreePoints(p1, p2, p3 Point) circle {
-	// Simple circumcircle of 3 points in 2D (Lat/Lon)
-	// This is an approximation for small geographic areas.
-	x1, y1 := p1.Lon, p1.Lat
-	x2, y2 := p2.Lon, p2.Lat
-	x3, y3 := p3.Lon, p3.Lat
-
-	D := 2 * (x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2))
-	if D == 0 {
-		// Points are collinear, find the two furthest apart
-		d12 := p1.DistanceTo(p2)
-		d13 := p1.DistanceTo(p3)
-		d23 := p2.DistanceTo(p3)
-		if d12 >= d13 && d12 >= d23 {
-			return circleFromTwoPoints(p1, p2)
-		}
-		if d13 >= d12 && d13 >= d23 {
-			return circleFromTwoPoints(p1, p3)
-		}
-		return circleFromTwoPoints(p2, p3)
-	}
-
-	Ux := ((x1*x1+y1*y1)*(y2-y3) + (x2*x2+y2*y2)*(y3-y1) + (x3*x3+y3*y3)*(y1-y2)) / D
-	Uy := ((x1*x1+y1*y1)*(x3-x2) + (x2*x2+y2*y2)*(x1-x3) + (x3*x3+y3*y3)*(x2-x1)) / D
-
-	center := Point{Lat: Uy, Lon: Ux}
-	return circle{center: center, radius: p1.DistanceTo(center)}
 }

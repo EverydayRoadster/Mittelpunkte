@@ -1,7 +1,9 @@
 package methods
 
 import (
+	"fmt"
 	"math"
+	"strings"
 )
 
 // MinimalDistanceSumEqualSpaced calculates the point that minimizes the sum of distances 
@@ -110,4 +112,29 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 	curr.Elevation = avgElev
 	curr.Method = m.Name()
 	return curr
+}
+
+func (m MinimalDistanceSumEqualSpaced) SVG(areas []Area, p Point, t SVGTransformer) string {
+	const spacing = 50.0 // Use larger spacing for SVG to avoid clutter
+	var sb strings.Builder
+	cx, cy := t.Project(p)
+
+	for _, a := range areas {
+		for i := 0; i < len(a.Points); i++ {
+			p1 := a.Points[i]
+			p2 := a.Points[(i+1)%len(a.Points)]
+			segmentDist := p1.DistanceTo(p2)
+			if segmentDist == 0 { continue }
+			
+			samples := int(segmentDist / spacing)
+			for s := 0; s < samples; s++ {
+				fraction := float64(s) * spacing / segmentDist
+				lat := p1.Lat + (p2.Lat-p1.Lat)*fraction
+				lon := p1.Lon + (p2.Lon-p1.Lon)*fraction
+				px, py := t.Project(Point{Lat: lat, Lon: lon})
+				sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`, cx, cy, px, py))
+			}
+		}
+	}
+	return sb.String()
 }
