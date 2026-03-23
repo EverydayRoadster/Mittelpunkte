@@ -1,4 +1,4 @@
-module github.com/falk/mittelpunkte
+module github.com/EverydayRoadster/Mittelpunkte
 
 go 1.26.1
 

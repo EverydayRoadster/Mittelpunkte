@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/falk/mittelpunkte/methods"
+	"github.com/EverydayRoadster/Mittelpunkte/methods"
 	"github.com/jonas-p/go-shp"
-	"github.com/paulmach/go.geojson"
+	geojson "github.com/paulmach/go.geojson"
 	"github.com/tkrajina/gpxgo/gpx"
 )
 
@@ -158,7 +158,7 @@ func readShapefile(path string) ([]methods.Area, error) {
 	var areas []methods.Area
 	for s.Next() {
 		idx, shape := s.Shape()
-		
+
 		name := fmt.Sprintf("Area %d", idx)
 		if nameIdx != -1 {
 			val := s.ReadAttribute(idx, nameIdx)
