@@ -3,6 +3,7 @@ module github.com/EverydayRoadster/Mittelpunkte
 go 1.26.1
 
 require (
+	github.com/im7mortal/UTM v1.4.0
 	github.com/jonas-p/go-shp v0.1.1
 	github.com/paulmach/go.geojson v1.5.0
 	github.com/tkrajina/gpxgo v1.4.0

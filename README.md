@@ -6,9 +6,11 @@
 
 - **Multiple Calculation Methods**: Supports 10 different algorithms for determining the center of an area.
 - **ESRI Shapefile Support**: Reads standard `.shp` files (and associated `.prj` for coordinate systems).
-- **Swiss Coordinate Support**: Automatically detects and converts Swiss CH1903+/LV95 coordinates to WGS84.
+- **Coordinate System Support**: 
+  - Automatically detects and converts Swiss **CH1903+/LV95** (EPSG:2056) to WGS84.
+  - Automatically detects and converts German **ETRS89 / UTM Zone 32N** (EPSG:25832) to WGS84.
 - **GeoJSON & GPX Output**: Saves both the input areas and the calculated middle points in formats ready for GIS tools or GPS devices.
-- **Grid-based Approximations**: Uses efficient grid-based methods for complex calculations like the Maximum Inscribed Circle or Relief Center of Gravity.
+- **Interactive Exploration**: If run without a filter, the tool lists all available areas in the Shapefiles and exits, making it easy to find the correct names for processing.
 - **Elevation Support**: Can fetch real-world elevation data via the OpenTopoData API for 3D center of gravity calculations.
 
 ## Installation
@@ -21,18 +23,25 @@ go install github.com/EverydayRoadster/Mittelpunkte@latest
 
 ## Usage
 
-Run the tool by pointing it to a directory containing ESRI Shapefiles:
+Run the tool by pointing it to a directory containing ESRI Shapefiles.
 
+### Step 1: List available areas
 ```bash
-Mittelpunkte -input ./data/my_shapes -output ./results
+Mittelpunkte -input ./data/german_shapes
+```
+This will list all areas found in the Shapefiles (e.g., city or district names).
+
+### Step 2: Calculate center points
+```bash
+Mittelpunkte -input ./data/german_shapes -filter "Stuttgart"
 ```
 
 ### Flags
 
 - `-input`: (Required) Path to the directory containing `.shp` files.
 - `-output`: (Default: `.`) Directory where the results will be saved.
-- `-filter`: A comma-separated list of area names (from the Shapefile's attributes) to process. If omitted, all areas are processed.
-- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Smaller values increase accuracy but significantly increase computation time.
+- `-filter`: A comma-separated list of area names to include. **If omitted, the tool lists available areas and exits.**
+- `-resolution`: (Default: `100.0`) Resolution in meters for grid-based methods. Smaller values increase accuracy but significantly increase computation time.
 
 ## Calculation Methods
 
@@ -47,7 +56,7 @@ The tool calculates the following 10 middle points for each selected area:
 7.  **ReliefCenterOfGravity**: A 3D center of gravity that takes the terrain's surface area into account (requires internet access to fetch elevation data).
 8.  **FermatPointF1**: The point inside the area that minimizes the sum of distances to all other points within the area.
 9.  **CenterOfMassSquared**: The point that minimizes the sum of *squared* distances to all other points within the area.
-10. **MaximumInscribedCircle**: Also known as the "Pole of Inaccessibility"; the point furthest from any boundary of the area.
+10. **SmallestEnclosingCircle**: The center of the smallest circle that completely contains all boundary points of the area.
 
 ## Output
 
@@ -60,7 +69,11 @@ For each run, the tool creates a sub-directory in the output path named after th
 
 ## Coordinate Systems
 
-The tool primarily works with WGS84 (latitude/longitude). However, it has built-in support for the Swiss coordinate system **CH1903+/LV95 (EPSG:2056)**. If a `.prj` file is found alongside the `.shp` file indicating Swiss coordinates, the tool will automatically perform the transformation.
+The tool primarily works with WGS84 (latitude/longitude). However, it has built-in support for:
+- **Swiss**: CH1903+/LV95 (EPSG:2056)
+- **German**: ETRS89 / UTM Zone 32N (EPSG:25832)
+
+If a `.prj` file is found alongside the `.shp` file indicating these coordinate systems, the tool will automatically perform the transformation.
 
 ## License
 

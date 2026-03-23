@@ -9,16 +9,25 @@ import (
 	"strings"
 
 	"github.com/EverydayRoadster/Mittelpunkte/methods"
+	"github.com/im7mortal/UTM"
 	"github.com/jonas-p/go-shp"
 	geojson "github.com/paulmach/go.geojson"
 	"github.com/tkrajina/gpxgo/gpx"
+)
+
+type Projection int
+
+const (
+	ProjWGS84 Projection = iota
+	ProjSwiss
+	ProjUTM32N
 )
 
 func main() {
 	inputDir := flag.String("input", "", "Directory containing ESRI Shapefiles")
 	outputDir := flag.String("output", ".", "Output directory")
 	filterNames := flag.String("filter", "", "Comma-separated list of area names to include")
-	resolution := flag.Float64("resolution", 30.0, "Resolution in meters for grid-based methods (default 30m for speed)")
+	resolution := flag.Float64("resolution", 100.0, "Resolution in meters for grid-based methods (default 100m for speed)")
 	flag.Parse()
 
 	if *inputDir == "" {
@@ -41,10 +50,6 @@ func main() {
 
 	dirName := filepath.Base(absInputDir)
 	finalOutputDir := filepath.Join(*outputDir, dirName)
-
-	if err := os.MkdirAll(finalOutputDir, 0755); err != nil {
-		log.Fatalf("Could not create output directory: %v", err)
-	}
 
 	files, err := os.ReadDir(absInputDir)
 	if err != nil {
@@ -84,19 +89,21 @@ func main() {
 			}
 		}
 	} else {
-		selectedAreas = allAreas
-		// If no filter but many areas, print names to help user
-		if len(allAreas) > 1 {
-			fmt.Println("Available areas:")
-			for _, a := range allAreas {
-				fmt.Printf(" - %s\n", a.Name)
-			}
-			fmt.Println("Use -filter to select specific areas.")
+		// If no filter, print names and exit
+		fmt.Println("Available areas:")
+		for _, a := range allAreas {
+			fmt.Printf(" - %s\n", a.Name)
 		}
+		fmt.Println("\nUse -filter to select specific areas for calculation.")
+		os.Exit(0)
 	}
 
 	if len(selectedAreas) == 0 {
 		log.Fatal("No areas selected")
+	}
+
+	if err := os.MkdirAll(finalOutputDir, 0755); err != nil {
+		log.Fatalf("Could not create output directory: %v", err)
 	}
 
 	// Save converted data as tracks
@@ -114,7 +121,7 @@ func main() {
 		methods.ReliefCenterOfGravity{Resolution: *resolution},
 		methods.FermatPointF1{Resolution: *resolution},
 		methods.CenterOfMassSquared{Resolution: *resolution},
-		methods.MaximumInscribedCircle{Resolution: *resolution},
+		methods.SmallestEnclosingCircle{},
 	}
 
 	var middlePoints []methods.Point
@@ -138,21 +145,36 @@ func readShapefile(path string) ([]methods.Area, error) {
 
 	// Check for projection
 	prjPath := strings.TrimSuffix(path, ".shp") + ".prj"
-	isSwiss := false
+	proj := ProjWGS84
 	if prjData, err := os.ReadFile(prjPath); err == nil {
-		if strings.Contains(string(prjData), "CH1903+_LV95") || strings.Contains(string(prjData), "EPSG:2056") {
-			isSwiss = true
+		prjStr := string(prjData)
+		if strings.Contains(prjStr, "CH1903+_LV95") || strings.Contains(prjStr, "EPSG:2056") {
+			proj = ProjSwiss
+		} else if strings.Contains(prjStr, "ETRS_1989_UTM_Zone_32N") || strings.Contains(prjStr, "EPSG:25832") {
+			proj = ProjUTM32N
 		}
 	}
 
-	// Identify name attribute column
+	// Identify name attribute column with priority
 	nameIdx := -1
+	currentPriority := -1
 	fields := s.Fields()
 	for i, f := range fields {
 		fieldName := strings.ToUpper(f.String())
-		if fieldName == "NAME" || fieldName == "GEMEINDE" || fieldName == "BEZIRKSNAM" {
+		
+		priority := -1
+		switch fieldName {
+		case "NAME", "GEMEINDE", "GEMEINDE_N", "GEN":
+			priority = 100 // High priority
+		case "BEZ", "BEZIRKSNAM", "KREIS_NAME", "REGION_NAM":
+			priority = 50 // Medium priority
+		case "KLASSE", "GML_ID":
+			priority = 10 // Low priority
+		}
+
+		if priority > currentPriority {
 			nameIdx = i
-			break
+			currentPriority = priority
 		}
 	}
 
@@ -171,24 +193,24 @@ func readShapefile(path string) ([]methods.Area, error) {
 		var points []methods.Point
 		switch shpObj := shape.(type) {
 		case *shp.Point:
-			points = append(points, convertPoint(shpObj.X, shpObj.Y, 0, isSwiss))
+			points = append(points, convertPoint(shpObj.X, shpObj.Y, 0, proj))
 		case *shp.PointZ:
-			points = append(points, convertPoint(shpObj.X, shpObj.Y, shpObj.Z, isSwiss))
+			points = append(points, convertPoint(shpObj.X, shpObj.Y, shpObj.Z, proj))
 		case *shp.PolyLine:
 			for _, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, 0, isSwiss))
+				points = append(points, convertPoint(p.X, p.Y, 0, proj))
 			}
 		case *shp.PolyLineZ:
 			for i, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, shpObj.ZArray[i], isSwiss))
+				points = append(points, convertPoint(p.X, p.Y, shpObj.ZArray[i], proj))
 			}
 		case *shp.Polygon:
 			for _, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, 0, isSwiss))
+				points = append(points, convertPoint(p.X, p.Y, 0, proj))
 			}
 		case *shp.PolygonZ:
 			for i, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, shpObj.ZArray[i], isSwiss))
+				points = append(points, convertPoint(p.X, p.Y, shpObj.ZArray[i], proj))
 			}
 		}
 
@@ -200,8 +222,10 @@ func readShapefile(path string) ([]methods.Area, error) {
 	return areas, nil
 }
 
-func convertPoint(x, y, z float64, isSwiss bool) methods.Point {
-	if isSwiss {
+func convertPoint(x, y, z float64, proj Projection) methods.Point {
+	var lat, lon float64
+	switch proj {
+	case ProjSwiss:
 		y_aux := (x - 2600000) / 1000000
 		x_aux := (y - 1200000) / 1000000
 
@@ -218,12 +242,18 @@ func convertPoint(x, y, z float64, isSwiss bool) methods.Point {
 			0.0447*y_aux*y_aux*x_aux -
 			0.0140*x_aux*x_aux*x_aux
 
-		lon := lonUnit * 100 / 36
-		lat := latUnit * 100 / 36
-
-		return methods.Point{Lat: lat, Lon: lon, Elevation: z}
+		lon = lonUnit * 100 / 36
+		lat = latUnit * 100 / 36
+	case ProjUTM32N:
+		var err error
+		lat, lon, err = UTM.ToLatLon(x, y, 32, "N")
+		if err != nil {
+			log.Printf("UTM conversion error: %v", err)
+		}
+	default:
+		lat, lon = y, x
 	}
-	return methods.Point{Lat: y, Lon: x, Elevation: z}
+	return methods.Point{Lat: lat, Lon: lon, Elevation: z}
 }
 
 func saveGeoJSON(path string, areas []methods.Area) {
