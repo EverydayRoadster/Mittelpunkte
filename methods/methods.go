@@ -100,3 +100,35 @@ func IsPointInPolygon(lat, lon float64, polygon []Point) bool {
 	}
 	return inside
 }
+
+// DistanceToSegment calculates the minimum distance from a point to a line segment.
+func DistanceToSegment(p, v, w Point) float64 {
+	dLat := w.Lat - v.Lat
+	dLon := w.Lon - v.Lon
+	l2 := dLat*dLat + dLon*dLon
+	if l2 == 0 {
+		return p.DistanceTo(v)
+	}
+	t := ((p.Lat-v.Lat)*dLat + (p.Lon-v.Lon)*dLon) / l2
+	t = math.Max(0, math.Min(1, t))
+	projection := Point{
+		Lat: v.Lat + t*dLat,
+		Lon: v.Lon + t*dLon,
+	}
+	return p.DistanceTo(projection)
+}
+
+// DistanceToBoundary calculates the minimum distance from a point to the boundary of the area.
+func DistanceToBoundary(p Point, areas []Area) float64 {
+	minDist := math.MaxFloat64
+	for _, a := range areas {
+		for i := 0; i < len(a.Points); i++ {
+			j := (i + 1) % len(a.Points)
+			d := DistanceToSegment(p, a.Points[i], a.Points[j])
+			if d < minDist {
+				minDist = d
+			}
+		}
+	}
+	return minDist
+}

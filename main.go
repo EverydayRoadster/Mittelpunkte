@@ -114,6 +114,7 @@ func main() {
 		methods.ReliefCenterOfGravity{Resolution: *resolution},
 		methods.FermatPointF1{Resolution: *resolution},
 		methods.CenterOfMassSquared{Resolution: *resolution},
+		methods.MaximumInscribedCircle{Resolution: *resolution},
 	}
 
 	var middlePoints []methods.Point
