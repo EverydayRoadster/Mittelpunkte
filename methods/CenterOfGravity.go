@@ -2,12 +2,14 @@ package methods
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
 // CenterOfGravity calculates the point of balance using a grid-based approximation.
+// It accounts for the convergence of meridians by weighting points with cos(latitude).
 type CenterOfGravity struct {
-	Resolution float64 // Optional: Resolution in meters. If 0, uses 200x200 grid.
+	Resolution float64 // Optional: Resolution in meters. If 0, uses 100m grid.
 }
 
 func (m CenterOfGravity) Name() string { return "CenterOfGravity" }
@@ -19,7 +21,7 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 
 	res := m.Resolution
 	if res <= 0 {
-		res = 100.0 // Default
+		res = 100.0 // Default 100m
 	}
 
 	gridPoints := GenerateGridPoints(areas, res)
@@ -27,15 +29,31 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 		return Point{Method: m.Name()}
 	}
 
-	var sumLat, sumLon float64
+	var xSum, ySum, zSum, weightSum float64
 	for _, p := range gridPoints {
-		sumLat += p.Lat
-		sumLon += p.Lon
+		phi := p.Lat * math.Pi / 180
+		lambda := p.Lon * math.Pi / 180
+		
+		// Weight each point by cos(phi) to account for varying grid point density
+		weight := math.Cos(phi)
+		
+		xSum += weight * math.Cos(phi) * math.Cos(lambda)
+		ySum += weight * math.Cos(phi) * math.Sin(lambda)
+		zSum += weight * math.Sin(phi)
+		weightSum += weight
 	}
 
+	x := xSum / weightSum
+	y := ySum / weightSum
+	z := zSum / weightSum
+
+	lon := math.Atan2(y, x) * 180 / math.Pi
+	hyp := math.Sqrt(x*x + y*y)
+	lat := math.Atan2(z, hyp) * 180 / math.Pi
+
 	return Point{
-		Lat:    sumLat / float64(len(gridPoints)),
-		Lon:    sumLon / float64(len(gridPoints)),
+		Lat:    lat,
+		Lon:    lon,
 		Method: m.Name(),
 	}
 }

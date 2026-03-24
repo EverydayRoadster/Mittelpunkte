@@ -5,9 +5,11 @@ import (
 	"math"
 )
 
-// CenterOfMassSquared calculates the point where the sum of squared distances 
-// to all other equally sized subareas (grid points) is the lowest.
-// Based on the 2015 article "A New Method for Finding Geographic Centers".
+// CenterOfMassSquared calculates the geographic center using the method 
+// proposed by Peter Rogerson (2015) in "A New Method for Finding Geographic Centers".
+// It finds the point that minimizes the sum of squared great-circle distances
+// to all points in the region by calculating the 3D Cartesian mean of points 
+// on the sphere and projecting it back to the surface.
 type CenterOfMassSquared struct {
 	Resolution float64
 }
@@ -17,39 +19,54 @@ func (m CenterOfMassSquared) Name() string { return "CenterOfMassSquared" }
 func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 	res := m.Resolution
 	if res <= 0 {
-		res = 30.0 // Default 30m
+		res = 100.0 // Default 100m for performance and sufficient accuracy
 	}
 
 	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
-		return Point{}
+		return Point{Method: m.Name()}
 	}
 
-	// For each grid point, calculate the sum of SQUARED distances to all OTHER grid points.
-	var minSum float64 = math.MaxFloat64
-	var bestPoint Point
-
-	for i, p1 := range gridPoints {
-		var currentSum float64
-		for j, p2 := range gridPoints {
-			if i == j {
-				continue
-			}
-			// Sum of squared distances: (x1-x2)^2 + (y1-y2)^2
-			dLat := p1.Lat - p2.Lat
-			dLon := p1.Lon - p2.Lon
-			distSq := dLat*dLat + dLon*dLon
-			currentSum += distSq
-		}
-
-		if currentSum < minSum {
-			minSum = currentSum
-			bestPoint = p1
-		}
+	// 1. Convert to 3D Cartesian coordinates and average them.
+	// We weight each point by cos(lat) to account for the grid point density
+	// distortion in our GenerateGridPoints (which uses a constant degree step).
+	// This ensures each grid point represents its true physical area.
+	var xSum, ySum, zSum, weightSum float64
+	for _, p := range gridPoints {
+		phi := p.Lat * math.Pi / 180
+		lambda := p.Lon * math.Pi / 180
+		
+		// Weight is proportional to the area each grid point represents
+		// A = (R * dLat) * (R * cos(lat) * dLon)
+		weight := math.Cos(phi)
+		
+		xSum += weight * math.Cos(phi) * math.Cos(lambda)
+		ySum += weight * math.Cos(phi) * math.Sin(lambda)
+		zSum += weight * math.Sin(phi)
+		weightSum += weight
 	}
 
-	bestPoint.Method = m.Name()
-	return bestPoint
+	x := xSum / weightSum
+	y := ySum / weightSum
+	z := zSum / weightSum
+
+	// 2. Convert back to Lat/Lon
+	lon := math.Atan2(y, x) * 180 / math.Pi
+	hyp := math.Sqrt(x*x + y*y)
+	lat := math.Atan2(z, hyp) * 180 / math.Pi
+
+	// Calculate average elevation
+	var sumElev float64
+	for _, p := range gridPoints {
+		sumElev += p.Elevation
+	}
+
+	return Point{
+		Lat:       lat,
+		Lon:       lon,
+		Elevation: sumElev / float64(len(gridPoints)),
+		Method:    m.Name(),
+	}
 }
 
 func (m CenterOfMassSquared) SVG(areas []Area, p Point, t SVGTransformer) string {
