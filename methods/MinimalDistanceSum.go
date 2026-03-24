@@ -8,6 +8,7 @@ import (
 
 // MinimalDistanceSum calculates the point that minimizes the sum of distances to all border points.
 // This is also known as the Geometric Median of the boundary points.
+// This version accounts for the Earth's curvature by using great-circle distances.
 type MinimalDistanceSum struct{}
 
 func (m MinimalDistanceSum) Name() string { return "MinimalDistanceSum" }
@@ -30,50 +31,61 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 
 	avgElev := sumElev / float64(len(points))
 
-	// Initial guess: Centroid (arithmetic mean)
-	var curr Point
+	// Initial guess: 3D Centroid
+	var xSum, ySum, zSum, weightSum float64
 	for _, p := range points {
-		curr.Lat += p.Lat
-		curr.Lon += p.Lon
+		phi := p.Lat * math.Pi / 180
+		lambda := p.Lon * math.Pi / 180
+		w := math.Cos(phi) // Weight to account for meridian convergence
+		xSum += w * math.Cos(phi) * math.Cos(lambda)
+		ySum += w * math.Cos(phi) * math.Sin(lambda)
+		zSum += w * math.Sin(phi)
+		weightSum += w
 	}
-	curr.Lat /= float64(len(points))
-	curr.Lon /= float64(len(points))
+	
+	curr := Point{
+		Lat: math.Atan2(zSum/weightSum, math.Sqrt(math.Pow(xSum/weightSum, 2)+math.Pow(ySum/weightSum, 2))) * 180 / math.Pi,
+		Lon: math.Atan2(ySum/weightSum, xSum/weightSum) * 180 / math.Pi,
+	}
 
-	// Weiszfeld's algorithm
+	// Weiszfeld's algorithm using Great Circle distances
 	const iterations = 100
 	const epsilon = 1e-10
 
 	for i := 0; i < iterations; i++ {
-		var nextLat, nextLon, totalWeight float64
+		var nextX, nextY, nextZ, totalWeight float64
 		foundExact := false
 
 		for _, p := range points {
-			d := dist(curr, p)
-			if d < epsilon {
-				// If current guess is exactly on a border point, we handle it
+			// Use Haversine distance
+			d := curr.DistanceTo(p)
+			if d < 1.0 { // 1 meter threshold for "exact"
 				foundExact = true
 				break
 			}
-			weight := 1.0 / d
-			nextLat += p.Lat * weight
-			nextLon += p.Lon * weight
-			totalWeight += weight
+			
+			// Weight is 1/d, further adjusted by cos(lat) for boundary point density
+			phiP := p.Lat * math.Pi / 180
+			lambdaP := p.Lon * math.Pi / 180
+			w := math.Cos(phiP) / d
+			
+			nextX += w * math.Cos(phiP) * math.Cos(lambdaP)
+			nextY += w * math.Cos(phiP) * math.Sin(lambdaP)
+			nextZ += w * math.Sin(phiP)
+			totalWeight += w
 		}
 
-		if foundExact {
-			// In most cases for geographic areas, the median won't be exactly on a point.
-			// If it is, Weiszfeld's algorithm requires a more complex update,
-			// but for this "simple approach", we can stop or slightly nudge.
+		if foundExact || totalWeight == 0 {
 			break
 		}
 
 		next := Point{
-			Lat: nextLat / totalWeight,
-			Lon: nextLon / totalWeight,
+			Lat: math.Atan2(nextZ/totalWeight, math.Sqrt(math.Pow(nextX/totalWeight, 2)+math.Pow(nextY/totalWeight, 2))) * 180 / math.Pi,
+			Lon: math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi,
 		}
 
-		// Check for convergence
-		if dist(curr, next) < epsilon {
+		// Check for convergence (approx 1mm)
+		if curr.DistanceTo(next) < 0.001 {
 			curr = next
 			break
 		}
@@ -91,17 +103,11 @@ func (m MinimalDistanceSum) SVG(areas []Area, p Point, t SVGTransformer) string 
 	for _, a := range areas {
 		for _, part := range a.Parts {
 			for i, pt := range part {
-				if i%5 != 0 { continue } // Only draw some lines to avoid mess
+				if i%5 != 0 { continue }
 				px, py := t.Project(pt)
 				sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`, cx, cy, px, py))
 			}
 		}
 	}
 	return sb.String()
-}
-
-func dist(p1, p2 Point) float64 {
-	dLat := p1.Lat - p2.Lat
-	dLon := p1.Lon - p2.Lon
-	return math.Sqrt(dLat*dLat + dLon*dLon)
 }

@@ -5,8 +5,8 @@ import (
 	"math"
 )
 
-// FermatPointF1 calculates the point where the sum of distances to all 
-// other equally sized subareas (grid points) is the lowest.
+// FermatPointF1 calculates the point that minimizes the sum of great-circle distances 
+// to all grid points inside the area. This is the Geometric Median of the area.
 type FermatPointF1 struct {
 	Resolution float64
 }
@@ -16,41 +16,74 @@ func (m FermatPointF1) Name() string { return "FermatPointF1" }
 func (m FermatPointF1) Calculate(areas []Area) Point {
 	res := m.Resolution
 	if res <= 0 {
-		res = 30.0 // Default 30m
+		res = 100.0 // Default 100m for performance
 	}
 
 	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
-		return Point{}
+		return Point{Method: m.Name()}
 	}
 
-	// For each grid point, calculate the sum of distances to all OTHER grid points.
-	// This is an O(N^2) operation.
-	var minSum float64 = math.MaxFloat64
-	var bestPoint Point
+	// This is the same problem as MinimalDistanceSum but for the whole area instead of just boundary.
+	// We use the same robust Weiszfeld algorithm in 3D.
+	
+	var xSum, ySum, zSum, weightSum float64
+	for _, p := range gridPoints {
+		phi := p.Lat * math.Pi / 180
+		lambda := p.Lon * math.Pi / 180
+		w := math.Cos(phi) // Weight to account for meridian convergence
+		xSum += w * math.Cos(phi) * math.Cos(lambda)
+		ySum += w * math.Cos(phi) * math.Sin(lambda)
+		zSum += w * math.Sin(phi)
+		weightSum += w
+	}
+	
+	curr := Point{
+		Lat: math.Atan2(zSum/weightSum, math.Sqrt(math.Pow(xSum/weightSum, 2)+math.Pow(ySum/weightSum, 2))) * 180 / math.Pi,
+		Lon: math.Atan2(ySum/weightSum, xSum/weightSum) * 180 / math.Pi,
+	}
 
-	for i, p1 := range gridPoints {
-		var currentSum float64
-		for j, p2 := range gridPoints {
-			if i == j {
-				continue
+	const iterations = 50
+	for i := 0; i < iterations; i++ {
+		var nextX, nextY, nextZ, totalWeight float64
+		foundExact := false
+
+		for _, p := range gridPoints {
+			d := curr.DistanceTo(p)
+			if d < 1.0 { 
+				foundExact = true
+				break
 			}
-			// Use simple Euclidean distance for performance in the nested loop
-			// (Relative differences are similar to Haversine on this small scale)
-			dLat := p1.Lat - p2.Lat
-			dLon := p1.Lon - p2.Lon
-			dist := math.Sqrt(dLat*dLat + dLon*dLon)
-			currentSum += dist
+			
+			phiP := p.Lat * math.Pi / 180
+			lambdaP := p.Lon * math.Pi / 180
+			// Weight each point by cos(phi) for density AND 1/d for median
+			w := math.Cos(phiP) / d
+			
+			nextX += w * math.Cos(phiP) * math.Cos(lambdaP)
+			nextY += w * math.Cos(phiP) * math.Sin(lambdaP)
+			nextZ += w * math.Sin(phiP)
+			totalWeight += w
 		}
 
-		if currentSum < minSum {
-			minSum = currentSum
-			bestPoint = p1
+		if foundExact || totalWeight == 0 {
+			break
 		}
+
+		next := Point{
+			Lat: math.Atan2(nextZ/totalWeight, math.Sqrt(math.Pow(nextX/totalWeight, 2)+math.Pow(nextY/totalWeight, 2))) * 180 / math.Pi,
+			Lon: math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi,
+		}
+
+		if curr.DistanceTo(next) < 0.001 {
+			curr = next
+			break
+		}
+		curr = next
 	}
 
-	bestPoint.Method = m.Name()
-	return bestPoint
+	curr.Method = m.Name()
+	return curr
 }
 
 func (m FermatPointF1) SVG(areas []Area, p Point, t SVGTransformer) string {

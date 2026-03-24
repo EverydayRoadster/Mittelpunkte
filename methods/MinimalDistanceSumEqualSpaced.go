@@ -51,40 +51,71 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 		}
 	}
 
-	// Now apply the same logic as MinimalDistanceSum
+	// Now apply the same logic as MinimalDistanceSum (Geometric Median)
 	if len(points) == 0 {
 		return Point{}
 	}
 
-	var curr Point
+	// Initial guess: 3D Centroid
+	var xSum, ySum, zSum, weightSum float64
 	for _, p := range points {
-		curr.Lat += p.Lat
-		curr.Lon += p.Lon
+		phi := p.Lat * math.Pi / 180
+		lambda := p.Lon * math.Pi / 180
+		w := math.Cos(phi) // Weight to account for meridian convergence
+		xSum += w * math.Cos(phi) * math.Cos(lambda)
+		ySum += w * math.Cos(phi) * math.Sin(lambda)
+		zSum += w * math.Sin(phi)
+		weightSum += w
 	}
-	curr.Lat /= float64(len(points))
-	curr.Lon /= float64(len(points))
+	
+	curr := Point{
+		Lat: math.Atan2(zSum/weightSum, math.Sqrt(math.Pow(xSum/weightSum, 2)+math.Pow(ySum/weightSum, 2))) * 180 / math.Pi,
+		Lon: math.Atan2(ySum/weightSum, xSum/weightSum) * 180 / math.Pi,
+	}
 
-	// Weiszfeld's algorithm
+	// Weiszfeld's algorithm using Great Circle distances
 	const iterations = 50
 	const epsilon = 1e-10
 
 	for i := 0; i < iterations; i++ {
-		var nextLat, nextLon, totalWeight float64
+		var nextX, nextY, nextZ, totalWeight float64
+		foundExact := false
+
 		for _, p := range points {
-			d := math.Sqrt(math.Pow(curr.Lat-p.Lat, 2) + math.Pow(curr.Lon-p.Lon, 2))
-			if d < epsilon {
-				continue
+			d := curr.DistanceTo(p)
+			if d < 1.0 { // 1 meter threshold
+				foundExact = true
+				break
 			}
-			weight := 1.0 / d
-			nextLat += p.Lat * weight
-			nextLon += p.Lon * weight
-			totalWeight += weight
+			
+			// For EqualSpaced, we don't need the extra cos(phi) density weight 
+			// because points are already equally distributed in 3D space.
+			// However, we still need it if our generation was done in Lat/Lon steps.
+			// Actually DistanceTo and spacing are in meters, so we are good.
+			// But the Density of points along a parallel at high lat is higher 
+			// if we use degree steps. Here we use spacing in meters, so it's uniform.
+			w := 1.0 / d
+			
+			phiP := p.Lat * math.Pi / 180
+			lambdaP := p.Lon * math.Pi / 180
+			
+			nextX += w * math.Cos(phiP) * math.Cos(lambdaP)
+			nextY += w * math.Cos(phiP) * math.Sin(lambdaP)
+			nextZ += w * math.Sin(phiP)
+			totalWeight += w
 		}
-		if totalWeight == 0 {
+
+		if foundExact || totalWeight == 0 {
 			break
 		}
-		next := Point{Lat: nextLat / totalWeight, Lon: nextLon / totalWeight}
-		if math.Sqrt(math.Pow(curr.Lat-next.Lat, 2)+math.Pow(curr.Lon-next.Lon, 2)) < epsilon {
+
+		next := Point{
+			Lat: math.Atan2(nextZ/totalWeight, math.Sqrt(math.Pow(nextX/totalWeight, 2)+math.Pow(nextY/totalWeight, 2))) * 180 / math.Pi,
+			Lon: math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi,
+		}
+
+		if curr.DistanceTo(next) < 0.001 {
+			curr = next
 			break
 		}
 		curr = next
@@ -107,7 +138,7 @@ func (m MinimalDistanceSumEqualSpaced) SVG(areas []Area, p Point, t SVGTransform
 				p2 := part[(i+1)%len(part)]
 				d := p1.DistanceTo(p2)
 				points = append(points, p1)
-				if d > 200 { // Use 200m for visualization
+				if d > 200 { 
 					steps := int(d / 200)
 					for s := 1; s <= steps; s++ {
 						frac := float64(s) / (d / 200)
