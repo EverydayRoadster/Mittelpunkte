@@ -29,6 +29,7 @@ func (p Point) DistanceTo(other Point) float64 {
 // Area represents a named set of points (e.g., a village boundary).
 type Area struct {
 	Name   string
+	Level  string
 	Points []Point
 }
 

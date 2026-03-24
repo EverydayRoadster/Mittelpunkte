@@ -41,7 +41,7 @@ Mittelpunkte -input ./data/german_shapes -filter "Stuttgart"
 - `-input`: (Required) Path to the directory containing `.shp` files.
 - `-output`: (Default: `.`) Directory where the results will be saved.
 - `-filter`: A comma-separated list of area names to include. **If omitted, the tool lists available areas and exits.**
-- `-resolution`: (Default: `100.0`) Resolution in meters for grid-based methods. Smaller values increase accuracy but significantly increase computation time.
+- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Smaller values increase accuracy but significantly increase computation time. Smaller than 30.0 values probably do not make sense, as data accuracy is regularly found at 30 meter grids only. 
 
 ## Calculation Methods
 

@@ -28,7 +28,7 @@ func main() {
 	inputDir := flag.String("input", "", "Directory containing ESRI Shapefiles")
 	outputDir := flag.String("output", ".", "Output directory")
 	filterNames := flag.String("filter", "", "Comma-separated list of area names to include")
-	resolution := flag.Float64("resolution", 100.0, "Resolution in meters for grid-based methods (default 100m for speed)")
+	resolution := flag.Float64("resolution", 30.0, "Resolution in meters for grid-based methods (default 100m for speed)")
 	flag.Parse()
 
 	if *inputDir == "" {
@@ -57,7 +57,11 @@ func main() {
 		log.Fatalf("Could not read input directory: %v", err)
 	}
 
+	// Group areas by level
 	var allAreas []methods.Area
+	var levels []string
+	areasByLevel := make(map[string][]methods.Area)
+
 	for _, file := range files {
 		if strings.ToLower(filepath.Ext(file.Name())) == ".shp" {
 			shpPath := filepath.Join(absInputDir, file.Name())
@@ -66,7 +70,15 @@ func main() {
 				log.Printf("Error reading %s: %v", file.Name(), err)
 				continue
 			}
-			allAreas = append(allAreas, areas...)
+
+			if len(areas) > 0 {
+				level := areas[0].Level
+				if _, ok := areasByLevel[level]; !ok {
+					levels = append(levels, level)
+				}
+				areasByLevel[level] = append(areasByLevel[level], areas...)
+				allAreas = append(allAreas, areas...)
+			}
 		}
 	}
 
@@ -83,7 +95,7 @@ func main() {
 		}
 		for _, area := range allAreas {
 			for _, f := range filters {
-				if strings.EqualFold(area.Name, f) {
+				if strings.EqualFold(area.Name, f) || strings.EqualFold(area.Level, f) {
 					selectedAreas = append(selectedAreas, area)
 					break
 				}
@@ -91,11 +103,15 @@ func main() {
 		}
 	} else {
 		// If no filter, print names and exit
-		fmt.Println("Available areas:")
-		for _, a := range allAreas {
-			fmt.Printf(" - %s\n", a.Name)
+		fmt.Println("Available areas by level (use -filter with name or level):")
+		for _, level := range levels {
+			areas := areasByLevel[level]
+			fmt.Printf("\nLevel: %s (%d areas)\n", level, len(areas))
+			for _, a := range areas {
+				fmt.Printf(" - %s\n", a.Name)
+			}
 		}
-		fmt.Println("\nUse -filter to select specific areas for calculation.")
+		fmt.Println("\nUse -filter to select specific areas or an entire level for calculation.")
 		os.Exit(0)
 	}
 
@@ -150,18 +166,30 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
 	for _, a := range areas {
 		for _, p := range a.Points {
-			if p.Lat < minLat { minLat = p.Lat }
-			if p.Lat > maxLat { maxLat = p.Lat }
-			if p.Lon < minLon { minLon = p.Lon }
-			if p.Lon > maxLon { maxLon = p.Lon }
+			if p.Lat < minLat {
+				minLat = p.Lat
+			}
+			if p.Lat > maxLat {
+				maxLat = p.Lat
+			}
+			if p.Lon < minLon {
+				minLon = p.Lon
+			}
+			if p.Lon > maxLon {
+				maxLon = p.Lon
+			}
 		}
 	}
 
 	// Add 5% padding
 	latPad := (maxLat - minLat) * 0.05
 	lonPad := (maxLon - minLon) * 0.05
-	if latPad == 0 { latPad = 0.01 }
-	if lonPad == 0 { lonPad = 0.01 }
+	if latPad == 0 {
+		latPad = 0.01
+	}
+	if lonPad == 0 {
+		lonPad = 0.01
+	}
 
 	width := 800.0
 	height := width * (maxLat - minLat + 2*latPad) / (maxLon - minLon + 2*lonPad)
@@ -192,7 +220,7 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	for i, method := range calcMethods {
 		res := results[i]
 		methodSVG := method.SVG(areas, res, t)
-		
+
 		// Final center point marker
 		cx, cy := t.Project(res)
 		markerSVG := fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="4" fill="red" stroke="white" stroke-width="1" />`+
@@ -237,12 +265,12 @@ func readShapefile(path string) ([]methods.Area, error) {
 	fields := s.Fields()
 	for i, f := range fields {
 		fieldName := strings.ToUpper(f.String())
-		
+
 		priority := -1
 		switch fieldName {
-		case "NAME", "GEMEINDE", "GEMEINDE_N", "GEN":
+		case "NAME", "GEMEINDE", "GEMEINDE_N", "GEN", "LAND_NAME", "LAND_N":
 			priority = 100 // High priority
-		case "BEZ", "BEZIRKSNAM", "KREIS_NAME", "REGION_NAM":
+		case "BEZ", "BEZIRKSNAM", "KREIS_NAME", "REGION_NAM", "REGIERUN_1", "REGIERUN_N":
 			priority = 50 // Medium priority
 		case "KLASSE", "GML_ID":
 			priority = 10 // Low priority
@@ -254,15 +282,29 @@ func readShapefile(path string) ([]methods.Area, error) {
 		}
 	}
 
+	// Base level name from file
+	levelName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	levelName = strings.TrimPrefix(levelName, "v_at_")
+	levelName = strings.Title(strings.ReplaceAll(levelName, "_", " "))
+	if levelName == "Regierungebezirk" {
+		levelName = "Regierungsbezirk"
+	}
+
 	var areas []methods.Area
 	for s.Next() {
 		idx, shape := s.Shape()
 
-		name := fmt.Sprintf("Area %d", idx)
+		// Default name is level if only 1 area, otherwise level + index
+		name := levelName
+		if s.AttributeCount() > 1 || idx > 0 {
+			name = fmt.Sprintf("%s %d", levelName, idx)
+		}
+
 		if nameIdx != -1 {
 			val := s.ReadAttribute(idx, nameIdx)
-			if strings.TrimSpace(val) != "" {
-				name = strings.TrimSpace(val)
+			trimmedVal := strings.TrimSpace(val)
+			if trimmedVal != "" && trimmedVal != "**********" {
+				name = trimmedVal
 			}
 		}
 
@@ -291,7 +333,7 @@ func readShapefile(path string) ([]methods.Area, error) {
 		}
 
 		if len(points) > 0 {
-			areas = append(areas, methods.Area{Name: name, Points: points})
+			areas = append(areas, methods.Area{Name: name, Level: levelName, Points: points})
 		}
 	}
 
