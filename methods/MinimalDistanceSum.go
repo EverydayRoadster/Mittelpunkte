@@ -16,9 +16,11 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 	var points []Point
 	sumElev := 0.0
 	for _, a := range areas {
-		points = append(points, a.Points...)
-		for _, p := range a.Points {
-			sumElev += p.Elevation
+		for _, part := range a.Parts {
+			points = append(points, part...)
+			for _, p := range part {
+				sumElev += p.Elevation
+			}
 		}
 	}
 
@@ -87,10 +89,12 @@ func (m MinimalDistanceSum) SVG(areas []Area, p Point, t SVGTransformer) string 
 	var sb strings.Builder
 	cx, cy := t.Project(p)
 	for _, a := range areas {
-		for i, pt := range a.Points {
-			if i%5 != 0 { continue } // Only draw some lines to avoid mess
-			px, py := t.Project(pt)
-			sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`, cx, cy, px, py))
+		for _, part := range a.Parts {
+			for i, pt := range part {
+				if i%5 != 0 { continue } // Only draw some lines to avoid mess
+				px, py := t.Project(pt)
+				sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`, cx, cy, px, py))
+			}
 		}
 	}
 	return sb.String()

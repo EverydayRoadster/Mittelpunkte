@@ -15,9 +15,11 @@ func (m RotatingBoundingBoxCenter) Calculate(areas []Area) Point {
 	var points []Point
 	sumElev := 0.0
 	for _, a := range areas {
-		points = append(points, a.Points...)
-		for _, p := range a.Points {
-			sumElev += p.Elevation
+		for _, part := range a.Parts {
+			points = append(points, part...)
+			for _, p := range part {
+				sumElev += p.Elevation
+			}
 		}
 	}
 
@@ -72,7 +74,9 @@ func (m RotatingBoundingBoxCenter) rotatedCenter(points []Point, degree int) (fl
 func (m RotatingBoundingBoxCenter) SVG(areas []Area, p Point, t SVGTransformer) string {
 	var points []Point
 	for _, a := range areas {
-		points = append(points, a.Points...)
+		for _, part := range a.Parts {
+			points = append(points, part...)
+		}
 	}
 	if len(points) == 0 {
 		return ""

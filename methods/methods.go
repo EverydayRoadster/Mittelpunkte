@@ -30,7 +30,7 @@ func (p Point) DistanceTo(other Point) float64 {
 type Area struct {
 	Name   string
 	Level  string
-	Points []Point
+	Parts  [][]Point
 }
 
 // CalculationMethod is the interface for different middle point calculation methods.
@@ -76,11 +76,13 @@ func GenerateGridPoints(areas []Area, resolution float64) []Point {
 	minLat, maxLat := math.MaxFloat64, -math.MaxFloat64
 	minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
 	for _, a := range areas {
-		for _, p := range a.Points {
-			if p.Lat < minLat { minLat = p.Lat }
-			if p.Lat > maxLat { maxLat = p.Lat }
-			if p.Lon < minLon { minLon = p.Lon }
-			if p.Lon > maxLon { maxLon = p.Lon }
+		for _, part := range a.Parts {
+			for _, p := range part {
+				if p.Lat < minLat { minLat = p.Lat }
+				if p.Lat > maxLat { maxLat = p.Lat }
+				if p.Lon < minLon { minLon = p.Lon }
+				if p.Lon > maxLon { maxLon = p.Lon }
+			}
 		}
 	}
 
@@ -105,10 +107,13 @@ func GenerateGridPoints(areas []Area, resolution float64) []Point {
 			
 			inside := false
 			for _, a := range areas {
-				if IsPointInPolygon(lat, lon, a.Points) {
-					inside = true
-					break
+				for _, part := range a.Parts {
+					if IsPointInPolygon(lat, lon, part) {
+						inside = true
+						break
+					}
 				}
+				if inside { break }
 			}
 			if inside {
 				gridPoints = append(gridPoints, Point{Lat: lat, Lon: lon})
@@ -151,11 +156,13 @@ func DistanceToSegment(p, v, w Point) float64 {
 func DistanceToBoundary(p Point, areas []Area) float64 {
 	minDist := math.MaxFloat64
 	for _, a := range areas {
-		for i := 0; i < len(a.Points); i++ {
-			j := (i + 1) % len(a.Points)
-			d := DistanceToSegment(p, a.Points[i], a.Points[j])
-			if d < minDist {
-				minDist = d
+		for _, part := range a.Parts {
+			for i := 0; i < len(part); i++ {
+				j := (i + 1) % len(part)
+				d := DistanceToSegment(p, part[i], part[j])
+				if d < minDist {
+					minDist = d
+				}
 			}
 		}
 	}

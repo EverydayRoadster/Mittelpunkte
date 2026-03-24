@@ -16,7 +16,9 @@ func (m SmallestEnclosingCircle) Name() string { return "SmallestEnclosingCircle
 func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
 	var points []Point
 	for _, a := range areas {
-		points = append(points, a.Points...)
+		for _, part := range a.Parts {
+			points = append(points, part...)
+		}
 	}
 
 	if len(points) == 0 {
@@ -40,7 +42,9 @@ func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
 func (m SmallestEnclosingCircle) SVG(areas []Area, p Point, t SVGTransformer) string {
 	var points []Point
 	for _, a := range areas {
-		points = append(points, a.Points...)
+		for _, part := range a.Parts {
+			points = append(points, part...)
+		}
 	}
 	if len(points) == 0 {
 		return ""

@@ -165,18 +165,12 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	minLat, maxLat := math.MaxFloat64, -math.MaxFloat64
 	minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
 	for _, a := range areas {
-		for _, p := range a.Points {
-			if p.Lat < minLat {
-				minLat = p.Lat
-			}
-			if p.Lat > maxLat {
-				maxLat = p.Lat
-			}
-			if p.Lon < minLon {
-				minLon = p.Lon
-			}
-			if p.Lon > maxLon {
-				maxLon = p.Lon
+		for _, part := range a.Parts {
+			for _, p := range part {
+				if p.Lat < minLat { minLat = p.Lat }
+				if p.Lat > maxLat { maxLat = p.Lat }
+				if p.Lon < minLon { minLon = p.Lon }
+				if p.Lon > maxLon { maxLon = p.Lon }
 			}
 		}
 	}
@@ -184,12 +178,8 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	// Add 5% padding
 	latPad := (maxLat - minLat) * 0.05
 	lonPad := (maxLon - minLon) * 0.05
-	if latPad == 0 {
-		latPad = 0.01
-	}
-	if lonPad == 0 {
-		lonPad = 0.01
-	}
+	if latPad == 0 { latPad = 0.01 }
+	if lonPad == 0 { lonPad = 0.01 }
 
 	width := 800.0
 	height := width * (maxLat - minLat + 2*latPad) / (maxLon - minLon + 2*lonPad)
@@ -207,15 +197,18 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	// Generate base polygon paths
 	var basePaths []string
 	for _, a := range areas {
-		var points []string
-		for _, p := range a.Points {
-			x, y := t.Project(p)
-			points = append(points, fmt.Sprintf("%.2f,%.2f", x, y))
+		for _, part := range a.Parts {
+			var points []string
+			for _, p := range part {
+				x, y := t.Project(p)
+				points = append(points, fmt.Sprintf("%.2f,%.2f", x, y))
+			}
+			basePaths = append(basePaths, fmt.Sprintf(`<polygon points="%s" fill="#f0f0f0" stroke="#ccc" stroke-width="1" />`,
+				strings.Join(points, " ")))
 		}
-		basePaths = append(basePaths, fmt.Sprintf(`<polygon points="%s" fill="#f0f0f0" stroke="#ccc" stroke-width="1" />`,
-			strings.Join(points, " ")))
 	}
 	baseSVG := strings.Join(basePaths, "\n")
+
 
 	for i, method := range calcMethods {
 		res := results[i]
@@ -308,37 +301,52 @@ func readShapefile(path string) ([]methods.Area, error) {
 			}
 		}
 
-		var points []methods.Point
+		var parts [][]methods.Point
 		switch shpObj := shape.(type) {
 		case *shp.Point:
-			points = append(points, convertPoint(shpObj.X, shpObj.Y, 0, proj))
+			parts = append(parts, []methods.Point{convertPoint(shpObj.X, shpObj.Y, 0, proj)})
 		case *shp.PointZ:
-			points = append(points, convertPoint(shpObj.X, shpObj.Y, shpObj.Z, proj))
+			parts = append(parts, []methods.Point{convertPoint(shpObj.X, shpObj.Y, shpObj.Z, proj)})
 		case *shp.PolyLine:
-			for _, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, 0, proj))
-			}
+			parts = extractParts(shpObj.Parts, shpObj.Points, nil, proj)
 		case *shp.PolyLineZ:
-			for i, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, shpObj.ZArray[i], proj))
-			}
+			parts = extractParts(shpObj.Parts, shpObj.Points, shpObj.ZArray, proj)
 		case *shp.Polygon:
-			for _, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, 0, proj))
-			}
+			parts = extractParts(shpObj.Parts, shpObj.Points, nil, proj)
 		case *shp.PolygonZ:
-			for i, p := range shpObj.Points {
-				points = append(points, convertPoint(p.X, p.Y, shpObj.ZArray[i], proj))
+			parts = extractParts(shpObj.Parts, shpObj.Points, shpObj.ZArray, proj)
+		}
+
+		if len(parts) > 0 {
+			areas = append(areas, methods.Area{Name: name, Level: levelName, Parts: parts})
+		}
+		}
+
+		return areas, nil
+		}
+
+		func extractParts(partsIdx []int32, points []shp.Point, zArray []float64, proj Projection) [][]methods.Point {
+		var parts [][]methods.Point
+		for i := 0; i < len(partsIdx); i++ {
+		start := partsIdx[i]
+		end := int32(len(points))
+		if i+1 < len(partsIdx) {
+			end = partsIdx[i+1]
+		}
+
+		var partPoints []methods.Point
+		for j := start; j < end; j++ {
+			z := 0.0
+			if zArray != nil {
+				z = zArray[j]
 			}
+			partPoints = append(partPoints, convertPoint(points[j].X, points[j].Y, z, proj))
+		}
+		parts = append(parts, partPoints)
+		}
+		return parts
 		}
 
-		if len(points) > 0 {
-			areas = append(areas, methods.Area{Name: name, Level: levelName, Points: points})
-		}
-	}
-
-	return areas, nil
-}
 
 func convertPoint(x, y, z float64, proj Projection) methods.Point {
 	var lat, lon float64
@@ -377,13 +385,35 @@ func convertPoint(x, y, z float64, proj Projection) methods.Point {
 func saveGeoJSON(path string, areas []methods.Area) {
 	fc := geojson.NewFeatureCollection()
 	for _, a := range areas {
-		coords := make([][]float64, len(a.Points))
-		for i, p := range a.Points {
-			coords[i] = []float64{p.Lon, p.Lat, p.Elevation}
+		if len(a.Parts) == 0 { continue }
+		
+		if len(a.Parts) == 1 {
+			// Single polygon: [][][]float64 (outer ring + holes)
+			ring := make([][]float64, len(a.Parts[0]))
+			for i, p := range a.Parts[0] {
+				ring[i] = []float64{p.Lon, p.Lat, p.Elevation}
+			}
+			f := geojson.NewPolygonFeature([][][]float64{ring})
+			f.SetProperty("name", a.Name)
+			fc.AddFeature(f)
+		} else {
+			// MultiPolygon: [][][]float64 (each element is a list of points representing a ring)
+			// Wait, if it's MultiPolygon it should be list of polygons, and each polygon is list of rings.
+			// Let's check the library. Usually MultiPolygon is [][][][]float64.
+			// If the error says it wants [][][]float64, maybe it treats it as a list of outer rings only?
+			
+			multi := make([][][]float64, len(a.Parts))
+			for i, part := range a.Parts {
+				ring := make([][]float64, len(part))
+				for j, p := range part {
+					ring[j] = []float64{p.Lon, p.Lat, p.Elevation}
+				}
+				multi[i] = ring
+			}
+			f := geojson.NewMultiPolygonFeature(multi)
+			f.SetProperty("name", a.Name)
+			fc.AddFeature(f)
 		}
-		f := geojson.NewLineStringFeature(coords)
-		f.SetProperty("name", a.Name)
-		fc.AddFeature(f)
 	}
 	data, _ := fc.MarshalJSON()
 	os.WriteFile(path, data, 0644)
@@ -393,17 +423,19 @@ func saveGPX(path string, areas []methods.Area) {
 	g := &gpx.GPX{}
 	for _, a := range areas {
 		trk := gpx.GPXTrack{Name: a.Name}
-		seg := gpx.GPXTrackSegment{}
-		for _, p := range a.Points {
-			seg.Points = append(seg.Points, gpx.GPXPoint{
-				Point: gpx.Point{
-					Latitude:  p.Lat,
-					Longitude: p.Lon,
-					Elevation: *gpx.NewNullableFloat64(p.Elevation),
-				},
-			})
+		for _, part := range a.Parts {
+			seg := gpx.GPXTrackSegment{}
+			for _, p := range part {
+				seg.Points = append(seg.Points, gpx.GPXPoint{
+					Point: gpx.Point{
+						Latitude:  p.Lat,
+						Longitude: p.Lon,
+						Elevation: *gpx.NewNullableFloat64(p.Elevation),
+					},
+				})
+			}
+			trk.Segments = append(trk.Segments, seg)
 		}
-		trk.Segments = append(trk.Segments, seg)
 		g.Tracks = append(g.Tracks, trk)
 	}
 	xml, _ := gpx.ToXml(g, gpx.ToXmlParams{Indent: true})

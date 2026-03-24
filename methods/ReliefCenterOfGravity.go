@@ -43,10 +43,12 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 	// Calculate weighted center of gravity
 	var sumLat, sumLon, sumWeight, sumElev float64
 	
-	minLat, _ := math.MaxFloat64, -math.MaxFloat64
+	minLat := math.MaxFloat64
 	for _, a := range areas {
-		for _, p := range a.Points {
-			if p.Lat < minLat { minLat = p.Lat }
+		for _, part := range a.Parts {
+			for _, p := range part {
+				if p.Lat < minLat { minLat = p.Lat }
+			}
 		}
 	}
 	
