@@ -20,10 +20,6 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 	}
 
 	res := m.Resolution
-	if res <= 0 {
-		res = 100.0 // Default 100m
-	}
-
 	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
 		return Point{Method: m.Name()}
@@ -60,9 +56,6 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 
 func (m CenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) string {
 	res := m.Resolution
-	if res <= 0 {
-		res = 100.0 // Larger resolution for visualization to avoid huge SVGs
-	}
 	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
 		return ""

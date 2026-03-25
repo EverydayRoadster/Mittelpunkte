@@ -73,28 +73,8 @@ func GenerateGridPoints(areas []Area, resolution float64) []Point {
 		return nil
 	}
 
-	minLat, maxLat := math.MaxFloat64, -math.MaxFloat64
-	minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
-	for _, a := range areas {
-		for _, part := range a.Parts {
-			for _, p := range part {
-				if p.Lat < minLat { minLat = p.Lat }
-				if p.Lat > maxLat { maxLat = p.Lat }
-				if p.Lon < minLon { minLon = p.Lon }
-				if p.Lon > maxLon { maxLon = p.Lon }
-			}
-		}
-	}
-
-	center := Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
-	pOffsetLat := Point{Lat: center.Lat + 0.1, Lon: center.Lon}
-	pOffsetLon := Point{Lat: center.Lat, Lon: center.Lon + 0.1}
-	
-	mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
-	mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
-	
-	stepLat := resolution / mPerDegLat
-	stepLon := resolution / mPerDegLon
+	minLat, maxLat, minLon, maxLon := getBoundingBox(areas)
+	stepLat, stepLon := getGridSteps(minLat, maxLat, minLon, maxLon, resolution)
 
 	var gridPoints []Point
 	latSteps := int((maxLat-minLat)/stepLat) + 1
@@ -105,22 +85,78 @@ func GenerateGridPoints(areas []Area, resolution float64) []Point {
 		for j := 0; j < lonSteps; j++ {
 			lon := minLon + (float64(j)+0.5)*stepLon
 			
-			inside := false
-			for _, a := range areas {
-				for _, part := range a.Parts {
-					if IsPointInPolygon(lat, lon, part) {
-						inside = true
-						break
-					}
-				}
-				if inside { break }
-			}
-			if inside {
+			if isPointInside(lat, lon, areas) {
 				gridPoints = append(gridPoints, Point{Lat: lat, Lon: lon})
 			}
 		}
 	}
 	return gridPoints
+}
+
+// CountGridPoints returns the number of points that would be generated inside the areas with the given resolution.
+func CountGridPoints(areas []Area, resolution float64) int {
+	if len(areas) == 0 || resolution <= 0 {
+		return 0
+	}
+
+	minLat, maxLat, minLon, maxLon := getBoundingBox(areas)
+	stepLat, stepLon := getGridSteps(minLat, maxLat, minLon, maxLon, resolution)
+
+	count := 0
+	latSteps := int((maxLat-minLat)/stepLat) + 1
+	lonSteps := int((maxLon-minLon)/stepLon) + 1
+
+	for i := 0; i < latSteps; i++ {
+		lat := minLat + (float64(i)+0.5)*stepLat
+		for j := 0; j < lonSteps; j++ {
+			lon := minLon + (float64(j)+0.5)*stepLon
+			
+			if isPointInside(lat, lon, areas) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func getBoundingBox(areas []Area) (minLat, maxLat, minLon, maxLon float64) {
+	minLat, maxLat = math.MaxFloat64, -math.MaxFloat64
+	minLon, maxLon = math.MaxFloat64, -math.MaxFloat64
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			for _, p := range part {
+				if p.Lat < minLat { minLat = p.Lat }
+				if p.Lat > maxLat { maxLat = p.Lat }
+				if p.Lon < minLon { minLon = p.Lon }
+				if p.Lon > maxLon { maxLon = p.Lon }
+			}
+		}
+	}
+	return
+}
+
+func getGridSteps(minLat, maxLat, minLon, maxLon, resolution float64) (stepLat, stepLon float64) {
+	center := Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
+	pOffsetLat := Point{Lat: center.Lat + 0.1, Lon: center.Lon}
+	pOffsetLon := Point{Lat: center.Lat, Lon: center.Lon + 0.1}
+	
+	mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
+	mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
+	
+	stepLat = resolution / mPerDegLat
+	stepLon = resolution / mPerDegLon
+	return
+}
+
+func isPointInside(lat, lon float64, areas []Area) bool {
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			if IsPointInPolygon(lat, lon, part) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // IsPointInPolygon implements the ray casting algorithm.

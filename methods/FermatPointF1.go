@@ -15,10 +15,6 @@ func (m FermatPointF1) Name() string { return "FermatPointF1" }
 
 func (m FermatPointF1) Calculate(areas []Area) Point {
 	res := m.Resolution
-	if res <= 0 {
-		res = 100.0 // Default 100m for performance
-	}
-
 	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
 		return Point{Method: m.Name()}

@@ -28,7 +28,7 @@ func main() {
 	inputDir := flag.String("input", "", "Directory containing ESRI Shapefiles")
 	outputDir := flag.String("output", ".", "Output directory")
 	filterNames := flag.String("filter", "", "Comma-separated list of area names to include")
-	resolution := flag.Float64("resolution", 30.0, "Resolution in meters for grid-based methods (default 100m for speed)")
+	resolution := flag.Float64("resolution", 30.0, "Resolution in meters for grid-based methods (min 30m, auto-increases for elevation methods if > 16384 points)")
 	flag.Parse()
 
 	if *inputDir == "" {
@@ -119,6 +119,27 @@ func main() {
 		log.Fatal("No areas selected")
 	}
 
+	// Validate resolution: must be at least 30.0
+	if *resolution < 30.0 {
+		fmt.Printf("Warning: Resolution %.1fm is too small, using default 30.0m for accuracy and performance.\n", *resolution)
+		*resolution = 30.0
+	}
+
+	// Calculate a separate resolution for elevation-based methods to stay under 16384 points
+	elevationResolution := *resolution
+	for {
+		count := methods.CountGridPoints(selectedAreas, elevationResolution)
+		if count <= 16384 {
+			break
+		}
+		elevationResolution *= 2
+	}
+
+	if elevationResolution != *resolution {
+		fmt.Printf("Auto-adjusted elevation resolution to %.1fm (%d points) to limit data queries.\n", 
+			elevationResolution, methods.CountGridPoints(selectedAreas, elevationResolution))
+	}
+
 	if err := os.MkdirAll(finalOutputDir, 0755); err != nil {
 		log.Fatalf("Could not create output directory: %v", err)
 	}
@@ -135,7 +156,7 @@ func main() {
 		methods.MinimalDistanceSum{},
 		methods.RotatingBoundingBoxCenter{},
 		methods.MinimalDistanceSumEqualSpaced{},
-		methods.ReliefCenterOfGravity{Resolution: *resolution},
+		methods.ReliefCenterOfGravity{Resolution: elevationResolution},
 		methods.FermatPointF1{Resolution: *resolution},
 		methods.CenterOfMassSquared{Resolution: *resolution},
 		methods.SmallestEnclosingCircle{},

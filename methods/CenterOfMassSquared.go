@@ -18,10 +18,6 @@ func (m CenterOfMassSquared) Name() string { return "CenterOfMassSquared" }
 
 func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 	res := m.Resolution
-	if res <= 0 {
-		res = 100.0 // Default 100m for performance and sufficient accuracy
-	}
-
 	gridPoints := GenerateGridPoints(areas, res)
 	if len(gridPoints) == 0 {
 		return Point{Method: m.Name()}

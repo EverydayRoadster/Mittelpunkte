@@ -10,6 +10,7 @@
   - Automatically detects and converts Swiss **CH1903+/LV95** (EPSG:2056) to WGS84.
   - Automatically detects and converts German **ETRS89 / UTM Zone 32N** (EPSG:25832) to WGS84.
 - **GeoJSON & GPX Output**: Saves both the input areas and the calculated middle points in formats ready for GIS tools or GPS devices.
+- **Visual Illustration**: Generates SVG files for each calculation method, illustrating the algorithm's process (e.g., grid points, rays, or bounding boxes).
 - **Interactive Exploration**: If run without a filter, the tool lists all available areas in the Shapefiles and exits, making it easy to find the correct names for processing.
 - **Elevation Support**: Can fetch real-world elevation data via the OpenTopoData API for 3D center of gravity calculations.
 
@@ -41,7 +42,7 @@ Mittelpunkte -input ./data/german_shapes -filter "Stuttgart"
 - `-input`: (Required) Path to the directory containing `.shp` files.
 - `-output`: (Default: `.`) Directory where the results will be saved.
 - `-filter`: A comma-separated list of area names to include. **If omitted, the tool lists available areas and exits.**
-- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Smaller values increase accuracy but significantly increase computation time. Smaller than 30.0 values probably do not make sense, as data accuracy is regularly found at 30 meter grids only. 
+- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Values smaller than 30.0 are automatically adjusted to 30.0 for accuracy and performance. For elevation-based methods (like `ReliefCenterOfGravity`), the resolution may be automatically increased (coarsened) to stay under 16,384 elevation points to limit API queries. 
 
 ## Calculation Methods
 
@@ -60,12 +61,13 @@ The tool calculates the following 10 middle points for each selected area:
 
 ## Output
 
-For each run, the tool creates a sub-directory in the output path named after the input directory. It generates four files:
+For each run, the tool creates a sub-directory in the output path named after the input directory. It generates the following files:
 
 - `areas.geojson`: The boundary polygons of the processed areas.
 - `areas.gpx`: The boundaries saved as GPX tracks.
 - `middle_points.geojson`: All calculated middle points with their method names as properties.
 - `middle_points.gpx`: The middle points saved as GPX waypoints.
+- `[MethodName].svg`: For each method, an SVG file is generated showing the polygon, the calculated midpoint, and a visualization of the specific method's logic.
 
 ## Coordinate Systems
 
