@@ -202,11 +202,15 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	if latPad == 0 { latPad = 0.01 }
 	if lonPad == 0 { lonPad = 0.01 }
 
+	// Account for meridian convergence (aspect ratio correction)
+	avgLat := (minLat + maxLat) / 2.0
+	cosLat := math.Cos(avgLat * math.Pi / 180.0)
+
 	width := 800.0
-	height := width * (maxLat - minLat + 2*latPad) / (maxLon - minLon + 2*lonPad)
+	height := width * (maxLat - minLat + 2*latPad) / ((maxLon - minLon + 2*lonPad) * cosLat)
 	if height > 1200 {
 		height = 1200
-		width = height * (maxLon - minLon + 2*lonPad) / (maxLat - minLat + 2*latPad)
+		width = height * ((maxLon - minLon + 2*lonPad) * cosLat) / (maxLat - minLat + 2*latPad)
 	}
 
 	t := methods.SVGTransformer{

@@ -52,9 +52,10 @@ func (m SmallestEnclosingCircle) SVG(areas []Area, p Point, t SVGTransformer) st
 
 	c := m.calculateSEC(points)
 	cx, cy := t.Project(c.center)
-	r := t.ProjectRadius(c.radius, c.center)
+	rx := t.ProjectRadiusX(c.radius, c.center)
+	ry := t.ProjectRadiusY(c.radius, c.center)
 
-	return fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="%.2f" fill="orange" fill-opacity="0.1" stroke="orange" stroke-width="2" />`, cx, cy, r)
+	return fmt.Sprintf(`<ellipse cx="%.2f" cy="%.2f" rx="%.2f" ry="%.2f" fill="orange" fill-opacity="0.1" stroke="orange" stroke-width="2" />`, cx, cy, rx, ry)
 }
 
 type vec2 struct{ x, y float64 }

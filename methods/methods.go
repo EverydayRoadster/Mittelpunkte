@@ -79,13 +79,23 @@ func (t SVGTransformer) Project(p Point) (float64, float64) {
 	return x, y
 }
 
-// ProjectRadius converts a distance in meters to SVG units (approximate).
-func (t SVGTransformer) ProjectRadius(meters float64, center Point) float64 {
-	p2 := Point{Lat: center.Lat, Lon: center.Lon + 0.01}
+// ProjectRadiusX converts a distance in meters to SVG units along the X axis.
+func (t SVGTransformer) ProjectRadiusX(meters float64, center Point) float64 {
+	p2 := Point{Lat: center.Lat, Lon: center.Lon + 0.001}
 	dist := center.DistanceTo(p2)
-	degPerMeter := 0.01 / dist
-	lonRange := t.MaxLon - t.MinLon
-	return (meters * degPerMeter / lonRange) * t.Width
+	return (meters / dist) * (0.001 / (t.MaxLon - t.MinLon)) * t.Width
+}
+
+// ProjectRadiusY converts a distance in meters to SVG units along the Y axis.
+func (t SVGTransformer) ProjectRadiusY(meters float64, center Point) float64 {
+	p2 := Point{Lat: center.Lat + 0.001, Lon: center.Lon}
+	dist := center.DistanceTo(p2)
+	return (meters / dist) * (0.001 / (t.MaxLat - t.MinLat)) * t.Height
+}
+
+// ProjectRadius is a legacy alias for ProjectRadiusX.
+func (t SVGTransformer) ProjectRadius(meters float64, center Point) float64 {
+	return t.ProjectRadiusX(meters, center)
 }
 
 
