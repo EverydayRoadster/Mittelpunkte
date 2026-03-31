@@ -26,7 +26,10 @@ func (m IntersectionOfOutermost) Calculate(areas []Area) Point {
 	pMinLat, pMaxLat, pMinLon, pMaxLon = points[0], points[0], points[0], points[0]
 	var sumLat, sumLon, sumElev float64
 
-	for _, p := range points {
+	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name(), i, len(points))
+		}
 		if p.Lat < pMinLat.Lat { pMinLat = p }
 		if p.Lat > pMaxLat.Lat { pMaxLat = p }
 		if p.Lon < pMinLon.Lon { pMinLon = p }
@@ -35,6 +38,7 @@ func (m IntersectionOfOutermost) Calculate(areas []Area) Point {
 		sumLon += p.Lon
 		sumElev += p.Elevation
 	}
+	UpdateProgress(m.Name(), len(points), len(points))
 	
 	avgLat := sumLat / float64(len(points))
 	avgLon := sumLon / float64(len(points))

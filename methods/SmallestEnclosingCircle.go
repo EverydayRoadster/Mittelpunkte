@@ -70,10 +70,14 @@ func (m SmallestEnclosingCircle) calculateSEC(points []Point) circle {
 
 	// Reference point for local projection (use the average to minimize distortion)
 	var avgLat, avgLon float64
-	for _, p := range points {
+	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Ref)", i, len(points))
+		}
 		avgLat += p.Lat
 		avgLon += p.Lon
 	}
+	UpdateProgress(m.Name()+" (Ref)", len(points), len(points))
 	ref := Point{Lat: avgLat / float64(len(points)), Lon: avgLon / float64(len(points))}
 
 	const R = 6371000.0
@@ -91,8 +95,12 @@ func (m SmallestEnclosingCircle) calculateSEC(points []Point) circle {
 
 	localPoints := make([]vec2, len(points))
 	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Init)", i, len(points))
+		}
 		localPoints[i] = toLocal(p)
 	}
+	UpdateProgress(m.Name()+" (Init)", len(points), len(points))
 
 	// Shuffle for O(N) performance
 	shuffled := make([]vec2, len(localPoints))

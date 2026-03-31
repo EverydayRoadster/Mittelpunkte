@@ -47,16 +47,22 @@ func (m RotatingBoundingBoxCenter) Calculate(areas []Area) Point {
 
 	localPoints := make([][2]float64, len(points))
 	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Init)", i, len(points))
+		}
 		px, py := toLocal(p)
 		localPoints[i] = [2]float64{px, py}
 	}
+	UpdateProgress(m.Name()+" (Init)", len(points), len(points))
 
 	var resX, resY float64
 	for degree := 0; degree < 360; degree++ {
+		UpdateProgress(m.Name()+" (Iter)", degree, 360)
 		mx, my := m.rotatedCenterLocal(localPoints, degree)
 		resX += mx
 		resY += my
 	}
+	UpdateProgress(m.Name()+" (Iter)", 360, 360)
 
 	res := fromLocal(resX/360.0, resY/360.0)
 	res.Elevation = sumElev / float64(len(points))

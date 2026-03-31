@@ -20,13 +20,16 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 	}
 
 	res := m.Resolution
-	gridPoints := GenerateGridPoints(areas, res)
+	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
 		return Point{Method: m.Name()}
 	}
 
 	var xSum, ySum, zSum, weightSum float64
-	for _, p := range gridPoints {
+	for i, p := range gridPoints {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Avg)", i, len(gridPoints))
+		}
 		phi := p.Lat * math.Pi / 180
 		lambda := p.Lon * math.Pi / 180
 		
@@ -38,6 +41,7 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 		zSum += weight * math.Sin(phi)
 		weightSum += weight
 	}
+	UpdateProgress(m.Name()+" (Avg)", len(gridPoints), len(gridPoints))
 
 	x := xSum / weightSum
 	y := ySum / weightSum
@@ -56,7 +60,7 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 
 func (m CenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) string {
 	res := m.Resolution
-	gridPoints := GenerateGridPoints(areas, res)
+	gridPoints := GenerateGridPoints(areas, res, "")
 	if len(gridPoints) == 0 {
 		return ""
 	}

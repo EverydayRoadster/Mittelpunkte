@@ -18,7 +18,7 @@ func (m CenterOfMassSquared) Name() string { return "CenterOfMassSquared" }
 
 func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 	res := m.Resolution
-	gridPoints := GenerateGridPoints(areas, res)
+	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
 		return Point{Method: m.Name()}
 	}
@@ -28,7 +28,10 @@ func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 	// distortion in our GenerateGridPoints (which uses a constant degree step).
 	// This ensures each grid point represents its true physical area.
 	var xSum, ySum, zSum, weightSum float64
-	for _, p := range gridPoints {
+	for i, p := range gridPoints {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Avg)", i, len(gridPoints))
+		}
 		phi := p.Lat * math.Pi / 180
 		lambda := p.Lon * math.Pi / 180
 		
@@ -41,6 +44,7 @@ func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 		zSum += weight * math.Sin(phi)
 		weightSum += weight
 	}
+	UpdateProgress(m.Name()+" (Avg)", len(gridPoints), len(gridPoints))
 
 	x := xSum / weightSum
 	y := ySum / weightSum
@@ -53,9 +57,13 @@ func (m CenterOfMassSquared) Calculate(areas []Area) Point {
 
 	// Calculate average elevation
 	var sumElev float64
-	for _, p := range gridPoints {
+	for i, p := range gridPoints {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Elev)", i, len(gridPoints))
+		}
 		sumElev += p.Elevation
 	}
+	UpdateProgress(m.Name()+" (Elev)", len(gridPoints), len(gridPoints))
 
 	return Point{
 		Lat:       lat,

@@ -22,17 +22,15 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 	}
 
 	res := m.Resolution
-	gridPoints := GenerateGridPoints(areas, res)
+	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
 		return Point{}
 	}
 
-	fmt.Printf("Fetching elevation for %d points inside the area...\n", len(gridPoints))
-	
 	// Fetch elevations (batched)
-	elevations, err := fetchElevations(gridPoints)
+	elevations, err := fetchElevations(gridPoints, m.Name())
 	if err != nil {
-		fmt.Printf("Warning: Could not fetch elevations: %v. Falling back to 2D CenterOfGravity.\n", err)
+		fmt.Printf("\nWarning: Could not fetch elevations: %v. Falling back to 2D CenterOfGravity.\n", err)
 		return CenterOfGravity{Resolution: res}.Calculate(areas)
 	}
 
@@ -62,12 +60,19 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 	stepLon := res / mPerDegLon
 
 	for idx, p := range gridPoints {
+		if idx%1000 == 0 {
+			UpdateProgress(m.Name()+" (Map)", idx, len(gridPoints))
+		}
 		i := int((p.Lat - minLat) / stepLat + 0.5)
 		j := int(p.Lon / stepLon + 0.5) // Simplified key
 		elevMap[key{i, j}] = elevations[idx]
 	}
+	UpdateProgress(m.Name()+" (Map)", len(gridPoints), len(gridPoints))
 
 	for idx, p := range gridPoints {
+		if idx%1000 == 0 {
+			UpdateProgress(m.Name()+" (Weight)", idx, len(gridPoints))
+		}
 		i := int((p.Lat - minLat) / stepLat + 0.5)
 		j := int(p.Lon / stepLon + 0.5)
 		
@@ -88,6 +93,7 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 		sumElev += z * weight
 		sumWeight += weight
 	}
+	UpdateProgress(m.Name()+" (Weight)", len(gridPoints), len(gridPoints))
 
 	return Point{
 		Lat:       sumLat / sumWeight,
@@ -105,11 +111,12 @@ func (m ReliefCenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) stri
 }
 
 // ... fetchElevations and openTopoResponse remain same ...
-func fetchElevations(points []Point) ([]float64, error) {
+func fetchElevations(points []Point, methodName string) ([]float64, error) {
 	elevations := make([]float64, len(points))
 	batchSize := 100
 	
 	for i := 0; i < len(points); i += batchSize {
+		UpdateProgress(methodName+" (API)", i, len(points))
 		end := i + batchSize
 		if end > len(points) {
 			end = len(points)
@@ -147,6 +154,7 @@ func fetchElevations(points []Point) ([]float64, error) {
 			time.Sleep(1000 * time.Millisecond)
 		}
 	}
+	UpdateProgress(methodName+" (API)", len(points), len(points))
 	
 	return elevations, nil
 }

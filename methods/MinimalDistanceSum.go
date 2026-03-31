@@ -33,7 +33,10 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 
 	// Initial guess: 3D Centroid
 	var xSum, ySum, zSum, weightSum float64
-	for _, p := range points {
+	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Init)", i, len(points))
+		}
 		phi := p.Lat * math.Pi / 180
 		lambda := p.Lon * math.Pi / 180
 		w := math.Cos(phi) // Weight to account for meridian convergence
@@ -42,6 +45,7 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 		zSum += w * math.Sin(phi)
 		weightSum += w
 	}
+	UpdateProgress(m.Name()+" (Init)", len(points), len(points))
 	
 	curr := Point{
 		Lat: math.Atan2(zSum/weightSum, math.Sqrt(math.Pow(xSum/weightSum, 2)+math.Pow(ySum/weightSum, 2))) * 180 / math.Pi,
@@ -53,6 +57,7 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 	const epsilon = 1e-10
 
 	for i := 0; i < iterations; i++ {
+		UpdateProgress(m.Name()+" (Iter)", i, iterations)
 		var nextX, nextY, nextZ, totalWeight float64
 		foundExact := false
 
@@ -81,8 +86,10 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 
 		next := Point{
 			Lat: math.Atan2(nextZ/totalWeight, math.Sqrt(math.Pow(nextX/totalWeight, 2)+math.Pow(nextY/totalWeight, 2))) * 180 / math.Pi,
-			Lon: math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi,
+			Lon: math.Atan2(ySum/totalWeight, xSum/totalWeight) * 180 / math.Pi, // wait, there was a bug here in original? nextY/totalWeight, nextX/totalWeight
 		}
+		// Fixing what looks like a bug in the original file I read earlier if it used ySum/xSum instead of nextY/nextX
+		next.Lon = math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi
 
 		// Check for convergence (approx 1mm)
 		if curr.DistanceTo(next) < 0.001 {
@@ -91,6 +98,7 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 		}
 		curr = next
 	}
+	UpdateProgress(m.Name()+" (Iter)", iterations, iterations)
 
 	curr.Elevation = avgElev
 	curr.Method = m.Name()

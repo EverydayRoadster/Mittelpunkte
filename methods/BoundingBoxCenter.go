@@ -24,7 +24,10 @@ func (m BoundingBoxCenter) Calculate(areas []Area) Point {
 	minLon, maxLon := points[0].Lon, points[0].Lon
 	sumElev := 0.0
 
-	for _, p := range points {
+	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name(), i, len(points))
+		}
 		if p.Lat < minLat {
 			minLat = p.Lat
 		}
@@ -39,6 +42,7 @@ func (m BoundingBoxCenter) Calculate(areas []Area) Point {
 		}
 		sumElev += p.Elevation
 	}
+	UpdateProgress(m.Name(), len(points), len(points))
 
 	return Point{
 		Lat:       (minLat + maxLat) / 2.0,

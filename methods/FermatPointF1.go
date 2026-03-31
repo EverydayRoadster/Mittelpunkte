@@ -15,7 +15,7 @@ func (m FermatPointF1) Name() string { return "FermatPointF1" }
 
 func (m FermatPointF1) Calculate(areas []Area) Point {
 	res := m.Resolution
-	gridPoints := GenerateGridPoints(areas, res)
+	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
 		return Point{Method: m.Name()}
 	}
@@ -24,7 +24,10 @@ func (m FermatPointF1) Calculate(areas []Area) Point {
 	// We use the same robust Weiszfeld algorithm in 3D.
 	
 	var xSum, ySum, zSum, weightSum float64
-	for _, p := range gridPoints {
+	for i, p := range gridPoints {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Init)", i, len(gridPoints))
+		}
 		phi := p.Lat * math.Pi / 180
 		lambda := p.Lon * math.Pi / 180
 		w := math.Cos(phi) // Weight to account for meridian convergence
@@ -33,6 +36,7 @@ func (m FermatPointF1) Calculate(areas []Area) Point {
 		zSum += w * math.Sin(phi)
 		weightSum += w
 	}
+	UpdateProgress(m.Name()+" (Init)", len(gridPoints), len(gridPoints))
 	
 	curr := Point{
 		Lat: math.Atan2(zSum/weightSum, math.Sqrt(math.Pow(xSum/weightSum, 2)+math.Pow(ySum/weightSum, 2))) * 180 / math.Pi,
@@ -41,6 +45,7 @@ func (m FermatPointF1) Calculate(areas []Area) Point {
 
 	const iterations = 50
 	for i := 0; i < iterations; i++ {
+		UpdateProgress(m.Name()+" (Iter)", i, iterations)
 		var nextX, nextY, nextZ, totalWeight float64
 		foundExact := false
 
@@ -53,7 +58,7 @@ func (m FermatPointF1) Calculate(areas []Area) Point {
 			
 			phiP := p.Lat * math.Pi / 180
 			lambdaP := p.Lon * math.Pi / 180
-			// Weight each point by cos(phi) for density AND 1/d for median
+			// Weight each point by cos(phiP) for density AND 1/d for median
 			w := math.Cos(phiP) / d
 			
 			nextX += w * math.Cos(phiP) * math.Cos(lambdaP)
@@ -77,6 +82,7 @@ func (m FermatPointF1) Calculate(areas []Area) Point {
 		}
 		curr = next
 	}
+	UpdateProgress(m.Name()+" (Iter)", iterations, iterations)
 
 	curr.Method = m.Name()
 	return curr

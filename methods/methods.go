@@ -1,6 +1,28 @@
 package methods
 
-import "math"
+import (
+	"fmt"
+	"math"
+	"strings"
+)
+
+// UpdateProgress prints a progress bar to the terminal.
+func UpdateProgress(method string, current, total int) {
+	if total <= 0 {
+		return
+	}
+	width := 40
+	percent := float64(current) / float64(total)
+	filled := int(percent * float64(width))
+	if filled > width {
+		filled = width
+	}
+	bar := strings.Repeat("*", filled) + strings.Repeat(".", width-filled)
+	fmt.Printf("\r%-25s [%s] %3d%%", method, bar, int(percent*100))
+	if current >= total {
+		fmt.Println()
+	}
+}
 
 // Point represents a geographical point with elevation.
 type Point struct {
@@ -68,7 +90,7 @@ func (t SVGTransformer) ProjectRadius(meters float64, center Point) float64 {
 
 
 // GenerateGridPoints generates a grid of points inside the provided areas based on resolution in meters.
-func GenerateGridPoints(areas []Area, resolution float64) []Point {
+func GenerateGridPoints(areas []Area, resolution float64, methodName string) []Point {
 	if len(areas) == 0 || resolution <= 0 {
 		return nil
 	}
@@ -81,6 +103,9 @@ func GenerateGridPoints(areas []Area, resolution float64) []Point {
 	lonSteps := int((maxLon-minLon)/stepLon) + 1
 
 	for i := 0; i < latSteps; i++ {
+		if methodName != "" && i%10 == 0 {
+			UpdateProgress(methodName+" (Grid)", i, latSteps)
+		}
 		lat := minLat + (float64(i)+0.5)*stepLat
 		for j := 0; j < lonSteps; j++ {
 			lon := minLon + (float64(j)+0.5)*stepLon
@@ -89,6 +114,9 @@ func GenerateGridPoints(areas []Area, resolution float64) []Point {
 				gridPoints = append(gridPoints, Point{Lat: lat, Lon: lon})
 			}
 		}
+	}
+	if methodName != "" {
+		UpdateProgress(methodName+" (Grid)", latSteps, latSteps)
 	}
 	return gridPoints
 }

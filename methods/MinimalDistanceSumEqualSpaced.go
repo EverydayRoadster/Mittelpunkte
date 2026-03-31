@@ -58,7 +58,10 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 
 	// Initial guess: 3D Centroid
 	var xSum, ySum, zSum, weightSum float64
-	for _, p := range points {
+	for i, p := range points {
+		if i%1000 == 0 {
+			UpdateProgress(m.Name()+" (Init)", i, len(points))
+		}
 		phi := p.Lat * math.Pi / 180
 		lambda := p.Lon * math.Pi / 180
 		w := math.Cos(phi) // Weight to account for meridian convergence
@@ -67,6 +70,7 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 		zSum += w * math.Sin(phi)
 		weightSum += w
 	}
+	UpdateProgress(m.Name()+" (Init)", len(points), len(points))
 	
 	curr := Point{
 		Lat: math.Atan2(zSum/weightSum, math.Sqrt(math.Pow(xSum/weightSum, 2)+math.Pow(ySum/weightSum, 2))) * 180 / math.Pi,
@@ -78,6 +82,7 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 	const epsilon = 1e-10
 
 	for i := 0; i < iterations; i++ {
+		UpdateProgress(m.Name()+" (Iter)", i, iterations)
 		var nextX, nextY, nextZ, totalWeight float64
 		foundExact := false
 
@@ -120,6 +125,7 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 		}
 		curr = next
 	}
+	UpdateProgress(m.Name()+" (Iter)", iterations, iterations)
 
 	curr.Method = m.Name()
 	return curr
