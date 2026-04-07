@@ -187,14 +187,15 @@ func getGridSteps(minLat, maxLat, minLon, maxLon, resolution float64) (stepLat, 
 }
 
 func isPointInside(lat, lon float64, areas []Area) bool {
+	inside := false
 	for _, a := range areas {
 		for _, part := range a.Parts {
 			if IsPointInPolygon(lat, lon, part) {
-				return true
+				inside = !inside
 			}
 		}
 	}
-	return false
+	return inside
 }
 
 // IsPointInPolygon implements the ray casting algorithm.
@@ -211,17 +212,26 @@ func IsPointInPolygon(lat, lon float64, polygon []Point) bool {
 
 // DistanceToSegment calculates the minimum distance from a point to a line segment.
 func DistanceToSegment(p, v, w Point) float64 {
+	const rad = math.Pi / 180.0
+	cosLat := math.Cos(v.Lat * rad)
+	
 	dLat := w.Lat - v.Lat
-	dLon := w.Lon - v.Lon
+	dLon := (w.Lon - v.Lon) * cosLat
+	
+	pLat := p.Lat - v.Lat
+	pLon := (p.Lon - v.Lon) * cosLat
+	
 	l2 := dLat*dLat + dLon*dLon
 	if l2 == 0 {
 		return p.DistanceTo(v)
 	}
-	t := ((p.Lat-v.Lat)*dLat + (p.Lon-v.Lon)*dLon) / l2
+	
+	t := (pLat*dLat + pLon*dLon) / l2
 	t = math.Max(0, math.Min(1, t))
+	
 	projection := Point{
 		Lat: v.Lat + t*dLat,
-		Lon: v.Lon + t*dLon,
+		Lon: v.Lon + t*(w.Lon-v.Lon),
 	}
 	return p.DistanceTo(projection)
 }

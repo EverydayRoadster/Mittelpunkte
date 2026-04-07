@@ -160,6 +160,7 @@ func main() {
 		methods.FermatPointF1{Resolution: *resolution},
 		methods.CenterOfMassSquared{Resolution: *resolution},
 		methods.SmallestEnclosingCircle{},
+		methods.LargestInnerCircle{},
 	}
 
 	var middlePoints []methods.Point
