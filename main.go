@@ -50,7 +50,17 @@ func main() {
 	}
 
 	dirName := filepath.Base(absInputDir)
-	finalOutputDir := filepath.Join(*outputDir, dirName)
+	filterDir := "all"
+	if *filterNames != "" {
+		// Clean up filter names for directory use
+		filters := strings.Split(*filterNames, ",")
+		for i := range filters {
+			filters[i] = strings.TrimSpace(filters[i])
+			filters[i] = strings.ReplaceAll(filters[i], " ", "_")
+		}
+		filterDir = strings.Join(filters, "_")
+	}
+	finalOutputDir := filepath.Join(*outputDir, dirName, filterDir)
 
 	files, err := os.ReadDir(absInputDir)
 	if err != nil {

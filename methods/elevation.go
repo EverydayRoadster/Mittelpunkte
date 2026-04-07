@@ -34,63 +34,82 @@ func loadCache() {
 	if info.Size() > 1024*1024 { // If > 1MB, show progress
 		fmt.Printf("Loading elevation cache (%d MB)...\n", info.Size()/(1024*1024))
 		
-		// For maps, json.Unmarshal is usually faster than streaming if memory allows,
-		// but since we want progress, we'll just indicate we're working.
-		// A full streaming progress bar for a single JSON object (the map) is complex
-		// without a custom parser. Let's at least provide a start/end message.
 		start := time.Now()
 		decoder := json.NewDecoder(file)
 		if err := decoder.Decode(&elevationCache); err != nil {
 			fmt.Printf("Warning: Failed to load cache: %v\n", err)
 		}
+		normalizeCache()
 		fmt.Printf("Cache loaded in %v (%d points)\n", time.Since(start).Round(time.Millisecond), len(elevationCache))
 	} else {
 		decoder := json.NewDecoder(file)
 		decoder.Decode(&elevationCache)
+		normalizeCache()
 	}
+}
+
+func normalizeCache() {
+	if len(elevationCache) == 0 {
+		return
+	}
+	newCache := make(map[string]float64)
+	for key, elev := range elevationCache {
+		var lat, lon float64
+		if _, err := fmt.Sscanf(key, "%f,%f", &lat, &lon); err == nil {
+			newKey := fmt.Sprintf("%.4f,%.4f", lat, lon)
+			if _, ok := newCache[newKey]; !ok {
+				newCache[newKey] = elev
+			}
+		}
+	}
+	elevationCache = newCache
 }
 
 func saveCache() {
 	os.MkdirAll(filepath.Dir(cacheFile), 0755)
-	data, _ := json.MarshalIndent(elevationCache, "", "  ")
+	data, _ := json.Marshal(elevationCache)
 	os.WriteFile(cacheFile, data, 0644)
 }
 
 func getCacheKey(p Point) string {
-	return fmt.Sprintf("%.6f,%.6f", p.Lat, p.Lon)
+	return fmt.Sprintf("%.4f,%.4f", p.Lat, p.Lon)
 }
 
 // FetchElevations fetches elevations for a list of points, using a local cache.
 func FetchElevations(points []Point, methodName string) ([]float64, error) {
 	elevations := make([]float64, len(points))
-	var missingIndices []int
-	var missingLocs []string
+	
+	// key -> list of indices in the original points slice
+	missing := make(map[string][]int)
+	var missingKeys []string
 
 	for i, p := range points {
 		key := getCacheKey(p)
 		if elev, ok := elevationCache[key]; ok {
 			elevations[i] = elev
 		} else {
-			missingIndices = append(missingIndices, i)
-			missingLocs = append(missingLocs, key)
+			if _, exists := missing[key]; !exists {
+				missingKeys = append(missingKeys, key)
+			}
+			missing[key] = append(missing[key], i)
 		}
 	}
 
-	if len(missingLocs) == 0 {
+	if len(missingKeys) == 0 {
 		return elevations, nil
 	}
 
 	// Fetch missing in batches
 	batchSize := 100
 	cacheUpdated := false
-	for i := 0; i < len(missingLocs); i += batchSize {
-		UpdateProgress(methodName+" (API)", i, len(missingLocs))
+	for i := 0; i < len(missingKeys); i += batchSize {
+		UpdateProgress(methodName+" (API)", i, len(missingKeys))
 		end := i + batchSize
-		if end > len(missingLocs) {
-			end = len(missingLocs)
+		if end > len(missingKeys) {
+			end = len(missingKeys)
 		}
 
-		batch := missingLocs[i:end]
+		batch := missingKeys[i:end]
 		url := fmt.Sprintf("https://api.opentopodata.org/v1/srtm30m?locations=%s", strings.Join(batch, "|"))
 
 		resp, err := http.Get(url)
@@ -115,18 +134,28 @@ func FetchElevations(points []Point, methodName string) ([]float64, error) {
 		}
 		resp.Body.Close()
 
+		if len(data.Results) != len(batch) {
+			// This shouldn't happen with opentopodata unless there's an error
+			fmt.Printf("\nWarning: API returned %d results for %d locations\n", len(data.Results), len(batch))
+		}
+
 		for j, res := range data.Results {
-			idx := missingIndices[i+j]
-			elevations[idx] = res.Elevation
-			elevationCache[missingLocs[i+j]] = res.Elevation
+			if j >= len(batch) {
+				break
+			}
+			key := batch[j]
+			elevationCache[key] = res.Elevation
+			for _, idx := range missing[key] {
+				elevations[idx] = res.Elevation
+			}
 			cacheUpdated = true
 		}
 
-		if i+batchSize < len(missingLocs) {
+		if i+batchSize < len(missingKeys) {
 			time.Sleep(1000 * time.Millisecond)
 		}
 	}
-	UpdateProgress(methodName+" (API)", len(missingLocs), len(missingLocs))
+	UpdateProgress(methodName+" (API)", len(missingKeys), len(missingKeys))
 
 	if cacheUpdated {
 		saveCache()
