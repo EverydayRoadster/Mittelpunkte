@@ -14,7 +14,7 @@ type LargestInnerCircle struct{}
 func (m LargestInnerCircle) Name() string { return "LargestInnerCircle" }
 
 func (m LargestInnerCircle) Calculate(areas []Area) Point {
-	minLat, maxLat, minLon, maxLon := getBoundingBox(areas)
+	minLat, maxLat, minLon, maxLon := GetBoundingBox(areas)
 
 	width := maxLon - minLon
 	height := maxLat - minLat

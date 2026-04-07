@@ -1,12 +1,8 @@
 package methods
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
-	"strings"
-	"time"
 )
 
 // ReliefCenterOfGravity calculates the point of balance on a 3D surface model.
@@ -28,7 +24,7 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 	}
 
 	// Fetch elevations (batched)
-	elevations, err := fetchElevations(gridPoints, m.Name())
+	elevations, err := FetchElevations(gridPoints, m.Name())
 	if err != nil {
 		fmt.Printf("\nWarning: Could not fetch elevations: %v. Falling back to 2D CenterOfGravity.\n", err)
 		return CenterOfGravity{Resolution: res}.Calculate(areas)
@@ -108,53 +104,4 @@ func (m ReliefCenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) stri
 	// Draw a star shape
 	return fmt.Sprintf(`<path d="M %f,%f l 2,-5 l 2,5 l 5,0 l -4,3 l 2,5 l -5,-3 l -5,3 l 2,-5 l -4,-3 z" fill="yellow" stroke="orange" stroke-width="1" />`,
 		cx, cy)
-}
-
-// ... fetchElevations and openTopoResponse remain same ...
-func fetchElevations(points []Point, methodName string) ([]float64, error) {
-	elevations := make([]float64, len(points))
-	batchSize := 100
-	
-	for i := 0; i < len(points); i += batchSize {
-		UpdateProgress(methodName+" (API)", i, len(points))
-		end := i + batchSize
-		if end > len(points) {
-			end = len(points)
-		}
-		
-		batch := points[i:end]
-		var locs []string
-		for _, p := range batch {
-			locs = append(locs, fmt.Sprintf("%.6f,%.6f", p.Lat, p.Lon))
-		}
-		
-		url := fmt.Sprintf("https://api.opentopodata.org/v1/srtm30m?locations=%s", strings.Join(locs, "|"))
-		
-		resp, err := http.Get(url)
-		if err != nil {
-			return nil, err
-		}
-		
-		var data struct {
-			Results []struct {
-				Elevation float64 `json:"elevation"`
-			} `json:"results"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-		resp.Body.Close()
-		
-		for j, res := range data.Results {
-			elevations[i+j] = res.Elevation
-		}
-		
-		if i+batchSize < len(points) {
-			time.Sleep(1000 * time.Millisecond)
-		}
-	}
-	UpdateProgress(methodName+" (API)", len(points), len(points))
-	
-	return elevations, nil
 }

@@ -42,11 +42,11 @@ Mittelpunkte -input ./data/german_shapes -filter "Stuttgart"
 - `-input`: (Required) Path to the directory containing `.shp` files.
 - `-output`: (Default: `.`) Directory where the results will be saved.
 - `-filter`: A comma-separated list of area names to include. **If omitted, the tool lists available areas and exits.**
-- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Values smaller than 30.0 are automatically adjusted to 30.0 for accuracy and performance. For elevation-based methods (like `ReliefCenterOfGravity`), the resolution may be automatically increased (coarsened) to stay under 16,384 elevation points to limit API queries. 
+- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Values smaller than 30.0 are automatically adjusted to 30.0 for accuracy and performance. For elevation-based methods (like `ReliefCenterOfGravity`), the resolution may be automatically increased (coarsened) to stay under 16,384 elevation points to limit API queries. Elevation data is cached locally in the `cache/` directory to speed up subsequent runs.
 
 ## Calculation Methods
 
-The tool calculates the following 10 middle points for each selected area:
+The tool calculates the following 11 middle points for each selected area:
 
 1.  **BoundingBoxCenter**: The arithmetic mean of the minimum and maximum latitudes and longitudes.
 2.  **IntersectionOfOutermost**: The intersection point of the lines connecting the extreme North-South and East-West points.
@@ -54,10 +54,11 @@ The tool calculates the following 10 middle points for each selected area:
 4.  **MinimalDistanceSum**: The geometric median of the boundary points; the point that minimizes the sum of Euclidean distances to all points on the polygon's border.
 5.  **RotatingBoundingBoxCenter**: The average center point of bounding boxes calculated at 1-degree rotation intervals.
 6.  **MinimalDistanceSumEqualSpaced**: Similar to MinimalDistanceSum, but uses points sampled at equal 10-meter intervals along the boundary.
-7.  **ReliefCenterOfGravity**: A 3D center of gravity that takes the terrain's surface area into account (requires internet access to fetch elevation data).
+7.  **ReliefCenterOfGravity**: A 3D center of gravity that takes the terrain's surface area into account (requires internet access to fetch elevation data, cached locally).
 8.  **FermatPointF1**: The point inside the area that minimizes the sum of distances to all other points within the area.
-9.  **CenterOfMassSquared**: The point that minimizes the sum of *squared* distances to all other points within the area.
+9.  **CenterOfMassSquared**: The point that minimizes the sum of *squared* distances to all other points within the area (ROGERSON, 2015).
 10. **SmallestEnclosingCircle**: The center of the smallest circle that completely contains all boundary points of the area.
+11. **LargestInnerCircle**: The center of the largest circle that can be inscribed within the shape (Pole of Inaccessibility).
 
 ## Output
 

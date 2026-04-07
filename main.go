@@ -119,25 +119,67 @@ func main() {
 		log.Fatal("No areas selected")
 	}
 
+	for i := range selectedAreas {
+		selectedAreas[i].PrecomputeBounds()
+	}
+
 	// Validate resolution: must be at least 30.0
 	if *resolution < 30.0 {
-		fmt.Printf("Warning: Resolution %.1fm is too small, using default 30.0m for accuracy and performance.\n", *resolution)
-		*resolution = 30.0
+		log.Fatalf("Error: Resolution %.1fm is too small. Minimum supported resolution is 30.0m.", *resolution)
 	}
 
-	// Calculate a separate resolution for elevation-based methods to stay under 16384 points
-	elevationResolution := *resolution
-	for {
-		count := methods.CountGridPoints(selectedAreas, elevationResolution)
-		if count <= 16384 {
-			break
+	// Check if resolution was explicitly provided
+	isExplicitRes := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "resolution" {
+			isExplicitRes = true
 		}
-		elevationResolution *= 2
-	}
+	})
 
-	if elevationResolution != *resolution {
-		fmt.Printf("Auto-adjusted elevation resolution to %.1fm (%d points) to limit data queries.\n", 
-			elevationResolution, methods.CountGridPoints(selectedAreas, elevationResolution))
+	// Calculate a separate resolution for elevation-based methods
+	elevationResolution := *resolution
+	if !isExplicitRes {
+		// Optimization: estimate count first to avoid very slow CountGridPoints
+		for {
+			minLat, maxLat, minLon, maxLon := methods.GetBoundingBox(selectedAreas)
+			center := methods.Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
+			pOffsetLat := methods.Point{Lat: center.Lat + 0.1, Lon: center.Lon}
+			pOffsetLon := methods.Point{Lat: center.Lat, Lon: center.Lon + 0.1}
+			mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
+			mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
+			latSteps := int((maxLat-minLat) / (elevationResolution / mPerDegLat)) + 1
+			lonSteps := int((maxLon-minLon) / (elevationResolution / mPerDegLon)) + 1
+			
+			// If estimated max points is already under limit, then actual points inside 
+			// will definitely be under limit.
+			if latSteps * lonSteps <= 16384 {
+				break
+			}
+			
+			// If estimate is huge, we don't even bother counting
+			if latSteps * lonSteps > 1000000 {
+				elevationResolution *= 2
+				continue
+			}
+
+			count := methods.CountGridPoints(selectedAreas, elevationResolution)
+			if count <= 16384 {
+				break
+			}
+			elevationResolution *= 2
+		}
+
+		if elevationResolution != *resolution {
+			fmt.Printf("Auto-adjusted elevation resolution to %.1fm (%d points) to limit data queries.\n", 
+				elevationResolution, methods.CountGridPoints(selectedAreas, elevationResolution))
+		}
+	} else {
+		// Even if explicit, inform the user about the point count for transparency
+		count := methods.CountGridPoints(selectedAreas, elevationResolution)
+		if count > 16384 {
+			fmt.Printf("Using explicit elevation resolution %.1fm (%d points). This may take some time.\n", 
+				elevationResolution, count)
+		}
 	}
 
 	if err := os.MkdirAll(finalOutputDir, 0755); err != nil {

@@ -53,6 +53,25 @@ type Area struct {
 	Name   string
 	Level  string
 	Parts  [][]Point
+	PartBounds []struct{ MinLat, MaxLat, MinLon, MaxLon float64 }
+}
+
+func (a *Area) PrecomputeBounds() {
+	a.PartBounds = make([]struct{ MinLat, MaxLat, MinLon, MaxLon float64 }, len(a.Parts))
+	for i, part := range a.Parts {
+		minLat, maxLat := math.MaxFloat64, -math.MaxFloat64
+		minLon, maxLon := math.MaxFloat64, -math.MaxFloat64
+		for _, p := range part {
+			if p.Lat < minLat { minLat = p.Lat }
+			if p.Lat > maxLat { maxLat = p.Lat }
+			if p.Lon < minLon { minLon = p.Lon }
+			if p.Lon > maxLon { maxLon = p.Lon }
+		}
+		a.PartBounds[i].MinLat = minLat
+		a.PartBounds[i].MaxLat = maxLat
+		a.PartBounds[i].MinLon = minLon
+		a.PartBounds[i].MaxLon = maxLon
+	}
 }
 
 // CalculationMethod is the interface for different middle point calculation methods.
@@ -105,7 +124,7 @@ func GenerateGridPoints(areas []Area, resolution float64, methodName string) []P
 		return nil
 	}
 
-	minLat, maxLat, minLon, maxLon := getBoundingBox(areas)
+	minLat, maxLat, minLon, maxLon := GetBoundingBox(areas)
 	stepLat, stepLon := getGridSteps(minLat, maxLat, minLon, maxLon, resolution)
 
 	var gridPoints []Point
@@ -113,7 +132,7 @@ func GenerateGridPoints(areas []Area, resolution float64, methodName string) []P
 	lonSteps := int((maxLon-minLon)/stepLon) + 1
 
 	for i := 0; i < latSteps; i++ {
-		if methodName != "" && i%10 == 0 {
+		if methodName != "" && i%100 == 0 {
 			UpdateProgress(methodName+" (Grid)", i, latSteps)
 		}
 		lat := minLat + (float64(i)+0.5)*stepLat
@@ -137,7 +156,7 @@ func CountGridPoints(areas []Area, resolution float64) int {
 		return 0
 	}
 
-	minLat, maxLat, minLon, maxLon := getBoundingBox(areas)
+	minLat, maxLat, minLon, maxLon := GetBoundingBox(areas)
 	stepLat, stepLon := getGridSteps(minLat, maxLat, minLon, maxLon, resolution)
 
 	count := 0
@@ -145,6 +164,9 @@ func CountGridPoints(areas []Area, resolution float64) int {
 	lonSteps := int((maxLon-minLon)/stepLon) + 1
 
 	for i := 0; i < latSteps; i++ {
+		if i%100 == 0 {
+			UpdateProgress("Counting Grid", i, latSteps)
+		}
 		lat := minLat + (float64(i)+0.5)*stepLat
 		for j := 0; j < lonSteps; j++ {
 			lon := minLon + (float64(j)+0.5)*stepLon
@@ -154,10 +176,12 @@ func CountGridPoints(areas []Area, resolution float64) int {
 			}
 		}
 	}
+	UpdateProgress("Counting Grid", latSteps, latSteps)
 	return count
 }
 
-func getBoundingBox(areas []Area) (minLat, maxLat, minLon, maxLon float64) {
+// GetBoundingBox calculates the bounding box for the provided areas.
+func GetBoundingBox(areas []Area) (minLat, maxLat, minLon, maxLon float64) {
 	minLat, maxLat = math.MaxFloat64, -math.MaxFloat64
 	minLon, maxLon = math.MaxFloat64, -math.MaxFloat64
 	for _, a := range areas {
@@ -189,7 +213,14 @@ func getGridSteps(minLat, maxLat, minLon, maxLon, resolution float64) (stepLat, 
 func isPointInside(lat, lon float64, areas []Area) bool {
 	inside := false
 	for _, a := range areas {
-		for _, part := range a.Parts {
+		for i, part := range a.Parts {
+			// Fast bounding box check
+			if len(a.PartBounds) > i {
+				b := a.PartBounds[i]
+				if lat < b.MinLat || lat > b.MaxLat || lon < b.MinLon || lon > b.MaxLon {
+					continue
+				}
+			}
 			if IsPointInPolygon(lat, lon, part) {
 				inside = !inside
 			}
