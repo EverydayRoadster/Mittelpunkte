@@ -139,46 +139,41 @@ func main() {
 	// Calculate a separate resolution for elevation-based methods
 	elevationResolution := *resolution
 	if !isExplicitRes {
-		// Optimization: estimate count first to avoid very slow CountGridPoints
-		for {
-			minLat, maxLat, minLon, maxLon := methods.GetBoundingBox(selectedAreas)
-			center := methods.Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
-			pOffsetLat := methods.Point{Lat: center.Lat + 0.1, Lon: center.Lon}
-			pOffsetLon := methods.Point{Lat: center.Lat, Lon: center.Lon + 0.1}
-			mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
-			mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
-			latSteps := int((maxLat-minLat) / (elevationResolution / mPerDegLat)) + 1
-			lonSteps := int((maxLon-minLon) / (elevationResolution / mPerDegLon)) + 1
-			
-			// If estimated max points is already under limit, then actual points inside 
-			// will definitely be under limit.
-			if latSteps * lonSteps <= 16384 {
-				break
-			}
-			
-			// If estimate is huge, we don't even bother counting
-			if latSteps * lonSteps > 1000000 {
-				elevationResolution *= 2
-				continue
-			}
-
-			count := methods.CountGridPoints(selectedAreas, elevationResolution)
-			if count <= 16384 {
-				break
-			}
-			elevationResolution *= 2
-		}
-
-		if elevationResolution != *resolution {
-			fmt.Printf("Auto-adjusted elevation resolution to %.1fm (%d points) to limit data queries.\n", 
-				elevationResolution, methods.CountGridPoints(selectedAreas, elevationResolution))
+		minLat, maxLat, minLon, maxLon := methods.GetBoundingBox(selectedAreas)
+		center := methods.Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
+		pOffsetLat := methods.Point{Lat: center.Lat + 0.1, Lon: center.Lon}
+		pOffsetLon := methods.Point{Lat: center.Lat, Lon: center.Lon + 0.1}
+		mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
+		mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
+		
+		widthMeters := (maxLon - minLon) * mPerDegLon
+		heightMeters := (maxLat - minLat) * mPerDegLat
+		
+		// Heuristic: assume 2/3 of the bounding box is occupied by the area.
+		// We want (width/res * height/res) * (2/3) <= 16384
+		// res^2 >= (width * height * 2/3) / 16384
+		targetRes := math.Sqrt((widthMeters * heightMeters * 0.666) / 16384.0)
+		
+		if targetRes > elevationResolution {
+			elevationResolution = targetRes
+			fmt.Printf("Auto-adjusted elevation resolution to %.1fm (estimated) to limit data queries.\n", 
+				elevationResolution)
 		}
 	} else {
-		// Even if explicit, inform the user about the point count for transparency
-		count := methods.CountGridPoints(selectedAreas, elevationResolution)
-		if count > 16384 {
-			fmt.Printf("Using explicit elevation resolution %.1fm (%d points). This may take some time.\n", 
-				elevationResolution, count)
+		// Even if explicit, inform the user about the estimated point count for transparency
+		minLat, maxLat, minLon, maxLon := methods.GetBoundingBox(selectedAreas)
+		center := methods.Point{Lat: (minLat + maxLat) / 2.0, Lon: (minLon + maxLon) / 2.0}
+		pOffsetLat := methods.Point{Lat: center.Lat + 0.1, Lon: center.Lon}
+		pOffsetLon := methods.Point{Lat: center.Lat, Lon: center.Lon + 0.1}
+		mPerDegLat := center.DistanceTo(pOffsetLat) * 10.0
+		mPerDegLon := center.DistanceTo(pOffsetLon) * 10.0
+		latSteps := int((maxLat-minLat) / (elevationResolution / mPerDegLat)) + 1
+		lonSteps := int((maxLon-minLon) / (elevationResolution / mPerDegLon)) + 1
+		estimatedCount := int(float64(latSteps*lonSteps) * 0.666)
+		
+		if estimatedCount > 16384 {
+			fmt.Printf("Using explicit elevation resolution %.1fm (~%d estimated points). This may take some time.\n", 
+				elevationResolution, estimatedCount)
 		}
 	}
 
