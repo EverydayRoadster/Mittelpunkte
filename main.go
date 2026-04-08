@@ -205,7 +205,6 @@ func main() {
 		methods.MinimalDistanceSumEqualSpaced{},
 		methods.ReliefCenterOfGravity{Resolution: elevationResolution},
 		methods.FermatPointF1{Resolution: *resolution},
-		methods.CenterOfMassSquared{Resolution: *resolution},
 		methods.SmallestEnclosingCircle{},
 		methods.LargestInnerCircle{},
 	}

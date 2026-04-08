@@ -30,8 +30,8 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 		return CenterOfGravity{Resolution: res}.Calculate(areas)
 	}
 
-	// Calculate weighted center of gravity
-	var sumLat, sumLon, sumWeight, sumElev float64
+	// Calculate weighted center of gravity in 3D Cartesian coordinates
+	var xSum, ySum, zSum, sumWeight, sumElev float64
 	
 	minLat := math.MaxFloat64
 	for _, a := range areas {
@@ -82,18 +82,34 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 			dzdy = (zNext - z) / res
 		}
 		
-		weight := math.Sqrt(1 + dzdx*dzdx + dzdy*dzdy)
+		phi := p.Lat * math.Pi / 180
+		lambda := p.Lon * math.Pi / 180
 		
-		sumLat += p.Lat * weight
-		sumLon += p.Lon * weight
-		sumElev += z * weight
+		// Weight each point by both cos(phi) (meridian convergence) 
+		// and the surface area factor sqrt(1 + (dz/dx)^2 + (dz/dy)^2).
+		reliefWeight := math.Sqrt(1 + dzdx*dzdx + dzdy*dzdy)
+		weight := math.Cos(phi) * reliefWeight
+		
+		xSum += weight * math.Cos(phi) * math.Cos(lambda)
+		ySum += weight * math.Cos(phi) * math.Sin(lambda)
+		zSum += weight * math.Sin(phi)
+		
 		sumWeight += weight
+		sumElev += z * reliefWeight // Average elevation weighted by surface area
 	}
 	UpdateProgress(m.Name()+" (Weight)", len(gridPoints), len(gridPoints))
 
+	x := xSum / sumWeight
+	y := ySum / sumWeight
+	z := zSum / sumWeight
+
+	lon := math.Atan2(y, x) * 180 / math.Pi
+	hyp := math.Sqrt(x*x + y*y)
+	lat := math.Atan2(z, hyp) * 180 / math.Pi
+
 	return Point{
-		Lat:       sumLat / sumWeight,
-		Lon:       sumLon / sumWeight,
+		Lat:       lat,
+		Lon:       lon,
 		Elevation: sumElev / sumWeight,
 		Method:    m.Name(),
 	}

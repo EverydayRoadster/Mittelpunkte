@@ -6,10 +6,14 @@ import (
 	"strings"
 )
 
-// CenterOfGravity calculates the point of balance using a grid-based approximation.
-// It accounts for the convergence of meridians by weighting points with cos(latitude).
+// CenterOfGravity calculates the geographic center using the method 
+// proposed by Peter Rogerson (2015) in "A New Method for Finding Geographic Centers".
+// It finds the point that minimizes the sum of squared great-circle distances
+// to all points in the region by calculating the 3D Cartesian mean of points 
+// on the sphere and projecting it back to the surface.
+// This is a grid-based approximation of the area's centroid.
 type CenterOfGravity struct {
-	Resolution float64 // Optional: Resolution in meters. If 0, uses 100m grid.
+	Resolution float64 // Optional: Resolution in meters. If 0, uses 30m grid (clamped in main).
 }
 
 func (m CenterOfGravity) Name() string { return "CenterOfGravity" }
