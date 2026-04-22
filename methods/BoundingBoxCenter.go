@@ -9,7 +9,7 @@ type BoundingBoxCenter struct{}
 
 func (m BoundingBoxCenter) Name() string { return "BoundingBoxCenter" }
 
-func (m BoundingBoxCenter) Calculate(areas []Area) Point {
+func (m BoundingBoxCenter) Calculate(areas []Area) []Point {
 	var points []Point
 	for _, a := range areas {
 		for _, part := range a.Parts {
@@ -18,7 +18,7 @@ func (m BoundingBoxCenter) Calculate(areas []Area) Point {
 	}
 
 	if len(points) == 0 {
-		return Point{}
+		return nil
 	}
 	minLat, maxLat := points[0].Lat, points[0].Lat
 	minLon, maxLon := points[0].Lon, points[0].Lon
@@ -44,27 +44,32 @@ func (m BoundingBoxCenter) Calculate(areas []Area) Point {
 	}
 	UpdateProgress(m.Name(), len(points), len(points))
 
-	return Point{
+	return []Point{{
 		Lat:       (minLat + maxLat) / 2.0,
 		Lon:       (minLon + maxLon) / 2.0,
 		Elevation: sumElev / float64(len(points)),
 		Method:    m.Name(),
-	}
+	}}
 }
 
-func (m BoundingBoxCenter) SVG(areas []Area, p Point, t SVGTransformer) string {
-	var points []Point
-	for _, a := range areas {
-		for _, part := range a.Parts {
-			points = append(points, part...)
-		}
-	}
+func (m BoundingBoxCenter) SVG(areas []Area, points []Point, t SVGTransformer) string {
 	if len(points) == 0 {
 		return ""
 	}
-	minLat, maxLat := points[0].Lat, points[0].Lat
-	minLon, maxLon := points[0].Lon, points[0].Lon
-	for _, p := range points {
+	// Use the first point for the bounding box calculation context if needed, 
+	// but BoundingBoxCenter SVG actually recalculates the box from areas.
+	var allPoints []Point
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			allPoints = append(allPoints, part...)
+		}
+	}
+	if len(allPoints) == 0 {
+		return ""
+	}
+	minLat, maxLat := allPoints[0].Lat, allPoints[0].Lat
+	minLon, maxLon := allPoints[0].Lon, allPoints[0].Lon
+	for _, p := range allPoints {
 		if p.Lat < minLat { minLat = p.Lat }
 		if p.Lat > maxLat { maxLat = p.Lat }
 		if p.Lon < minLon { minLon = p.Lon }

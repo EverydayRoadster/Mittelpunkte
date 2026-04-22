@@ -13,7 +13,7 @@ type SmallestEnclosingCircle struct{}
 
 func (m SmallestEnclosingCircle) Name() string { return "SmallestEnclosingCircle" }
 
-func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
+func (m SmallestEnclosingCircle) Calculate(areas []Area) []Point {
 	var points []Point
 	for _, a := range areas {
 		for _, part := range a.Parts {
@@ -22,7 +22,7 @@ func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
 	}
 
 	if len(points) == 0 {
-		return Point{}
+		return nil
 	}
 
 	c := m.calculateSEC(points)
@@ -36,21 +36,25 @@ func (m SmallestEnclosingCircle) Calculate(areas []Area) Point {
 	res := c.center
 	res.Elevation = sumElev / float64(len(points))
 	res.Method = m.Name()
-	return res
+	return []Point{res}
 }
 
-func (m SmallestEnclosingCircle) SVG(areas []Area, p Point, t SVGTransformer) string {
-	var points []Point
-	for _, a := range areas {
-		for _, part := range a.Parts {
-			points = append(points, part...)
-		}
-	}
+func (m SmallestEnclosingCircle) SVG(areas []Area, points []Point, t SVGTransformer) string {
 	if len(points) == 0 {
 		return ""
 	}
+	
+	var allBoundaryPoints []Point
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			allBoundaryPoints = append(allBoundaryPoints, part...)
+		}
+	}
+	if len(allBoundaryPoints) == 0 {
+		return ""
+	}
 
-	c := m.calculateSEC(points)
+	c := m.calculateSEC(allBoundaryPoints)
 	cx, cy := t.Project(c.center)
 	rx := t.ProjectRadiusX(c.radius, c.center)
 	ry := t.ProjectRadiusY(c.radius, c.center)

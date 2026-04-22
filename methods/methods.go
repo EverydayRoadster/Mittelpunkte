@@ -77,8 +77,8 @@ func (a *Area) PrecomputeBounds() {
 // CalculationMethod is the interface for different middle point calculation methods.
 type CalculationMethod interface {
 	Name() string
-	Calculate(areas []Area) Point
-	SVG(areas []Area, p Point, t SVGTransformer) string
+	Calculate(areas []Area) []Point
+	SVG(areas []Area, points []Point, t SVGTransformer) string
 }
 
 // SVGTransformer handles projection of Lat/Lon to SVG coordinates.

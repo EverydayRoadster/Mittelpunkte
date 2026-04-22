@@ -12,15 +12,15 @@ type ReliefCenterOfGravity struct {
 
 func (m ReliefCenterOfGravity) Name() string { return "ReliefCenterOfGravity" }
 
-func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
+func (m ReliefCenterOfGravity) Calculate(areas []Area) []Point {
 	if len(areas) == 0 {
-		return Point{}
+		return nil
 	}
 
 	res := m.Resolution
 	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
-		return Point{}
+		return nil
 	}
 
 	// Fetch elevations (batched)
@@ -107,15 +107,19 @@ func (m ReliefCenterOfGravity) Calculate(areas []Area) Point {
 	hyp := math.Sqrt(x*x + y*y)
 	lat := math.Atan2(z, hyp) * 180 / math.Pi
 
-	return Point{
+	return []Point{{
 		Lat:       lat,
 		Lon:       lon,
 		Elevation: sumElev / sumWeight,
 		Method:    m.Name(),
-	}
+	}}
 }
 
-func (m ReliefCenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) string {
+func (m ReliefCenterOfGravity) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
+	p := points[0]
 	cx, cy := t.Project(p)
 	// Draw a star shape
 	return fmt.Sprintf(`<path d="M %f,%f l 2,-5 l 2,5 l 5,0 l -4,3 l 2,5 l -5,-3 l -5,3 l 2,-5 l -4,-3 z" fill="yellow" stroke="orange" stroke-width="1" />`,

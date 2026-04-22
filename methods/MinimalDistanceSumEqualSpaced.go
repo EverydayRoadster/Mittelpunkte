@@ -14,7 +14,7 @@ type MinimalDistanceSumEqualSpaced struct {
 
 func (m MinimalDistanceSumEqualSpaced) Name() string { return "MinimalDistanceSumEqualSpaced" }
 
-func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
+func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) []Point {
 	spacing := m.Spacing
 	if spacing <= 0 {
 		spacing = 50.0 // Default 50m spacing
@@ -53,7 +53,7 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 
 	// Now apply the same logic as MinimalDistanceSum (Geometric Median)
 	if len(points) == 0 {
-		return Point{}
+		return nil
 	}
 
 	// Initial guess: 3D Centroid
@@ -128,27 +128,31 @@ func (m MinimalDistanceSumEqualSpaced) Calculate(areas []Area) Point {
 	UpdateProgress(m.Name()+" (Iter)", iterations, iterations)
 
 	curr.Method = m.Name()
-	return curr
+	return []Point{curr}
 }
 
-func (m MinimalDistanceSumEqualSpaced) SVG(areas []Area, p Point, t SVGTransformer) string {
+func (m MinimalDistanceSumEqualSpaced) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
+	p := points[0]
 	var sb strings.Builder
 	cx, cy := t.Project(p)
 	
-	// Collect points for visualization
-	var points []Point
+	// Collect boundary points for visualization
+	var boundaryPoints []Point
 	for _, a := range areas {
 		for _, part := range a.Parts {
 			for i := 0; i < len(part); i++ {
 				p1 := part[i]
 				p2 := part[(i+1)%len(part)]
 				d := p1.DistanceTo(p2)
-				points = append(points, p1)
+				boundaryPoints = append(boundaryPoints, p1)
 				if d > 200 { 
 					steps := int(d / 200)
 					for s := 1; s <= steps; s++ {
 						frac := float64(s) / (d / 200)
-						points = append(points, Point{
+						boundaryPoints = append(boundaryPoints, Point{
 							Lat: p1.Lat + (p2.Lat-p1.Lat)*frac,
 							Lon: p1.Lon + (p2.Lon-p1.Lon)*frac,
 						})
@@ -158,7 +162,7 @@ func (m MinimalDistanceSumEqualSpaced) SVG(areas []Area, p Point, t SVGTransform
 		}
 	}
 
-	for i, pt := range points {
+	for i, pt := range boundaryPoints {
 		if i%10 != 0 { continue }
 		px, py := t.Project(pt)
 		sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="green" stroke-width="0.3" stroke-opacity="0.2" />`, cx, cy, px, py))

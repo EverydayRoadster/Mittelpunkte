@@ -105,7 +105,15 @@ func main() {
 		}
 		for _, area := range allAreas {
 			for _, f := range filters {
-				if strings.EqualFold(area.Name, f) || strings.EqualFold(area.Level, f) {
+				if strings.Contains(f, "::") {
+					parts := strings.SplitN(f, "::", 2)
+					reqLevel := strings.TrimSpace(parts[0])
+					reqName := strings.TrimSpace(parts[1])
+					if strings.EqualFold(area.Level, reqLevel) && strings.EqualFold(area.Name, reqName) {
+						selectedAreas = append(selectedAreas, area)
+						break
+					}
+				} else if strings.EqualFold(area.Name, f) || strings.EqualFold(area.Level, f) {
 					selectedAreas = append(selectedAreas, area)
 					break
 				}
@@ -204,27 +212,32 @@ func main() {
 		methods.RotatingBoundingBoxCenter{},
 		methods.MinimalDistanceSumEqualSpaced{},
 		methods.ReliefCenterOfGravity{Resolution: elevationResolution},
+		methods.ElevationQuartiles{Resolution: elevationResolution},
 		methods.FermatPointF1{Resolution: *resolution},
 		methods.SmallestEnclosingCircle{},
 		methods.LargestInnerCircle{},
 	}
 
-	var middlePoints []methods.Point
+	var allMiddlePoints []methods.Point
+	var resultsByMethod [][]methods.Point
 	for _, method := range calcMethods {
-		mp := method.Calculate(selectedAreas)
-		middlePoints = append(middlePoints, mp)
-		fmt.Printf("Method %s: Lat %.6f, Lon %.6f\n", mp.Method, mp.Lat, mp.Lon)
+		mps := method.Calculate(selectedAreas)
+		resultsByMethod = append(resultsByMethod, mps)
+		allMiddlePoints = append(allMiddlePoints, mps...)
+		for _, mp := range mps {
+			fmt.Printf("Method %s: Lat %.6f, Lon %.6f\n", mp.Method, mp.Lat, mp.Lon)
+		}
 	}
 
 	// Save middle points
-	saveMiddlePointsGeoJSON(filepath.Join(finalOutputDir, "middle_points.geojson"), middlePoints)
-	saveMiddlePointsGPX(filepath.Join(finalOutputDir, "middle_points.gpx"), middlePoints)
+	saveMiddlePointsGeoJSON(filepath.Join(finalOutputDir, "middle_points.geojson"), allMiddlePoints)
+	saveMiddlePointsGPX(filepath.Join(finalOutputDir, "middle_points.gpx"), allMiddlePoints)
 
 	// Save SVGs
-	saveSVGs(finalOutputDir, selectedAreas, calcMethods, middlePoints)
+	saveSVGs(finalOutputDir, selectedAreas, calcMethods, resultsByMethod)
 }
 
-func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.CalculationMethod, results []methods.Point) {
+func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.CalculationMethod, results [][]methods.Point) {
 	if len(areas) == 0 {
 		return
 	}
@@ -286,11 +299,22 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 		res := results[i]
 		methodSVG := method.SVG(areas, res, t)
 
-		// Final center point marker
-		cx, cy := t.Project(res)
-		markerSVG := fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="4" fill="red" stroke="white" stroke-width="1" />`+
-			`<text x="%.2f" y="%.2f" font-family="sans-serif" font-size="12" fill="black" dy="-10" text-anchor="middle">%s</text>`,
-			cx, cy, cx, cy, method.Name())
+		// Final center point markers
+		var markers strings.Builder
+		for _, p := range res {
+			cx, cy := t.Project(p)
+			color := "red"
+			if strings.Contains(p.Method, "Q1") {
+				color = "red"
+			} else if strings.Contains(p.Method, "Q2") {
+				color = "blue"
+			} else if strings.Contains(p.Method, "Q3") {
+				color = "green"
+			}
+			markers.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="4" fill="%s" stroke="white" stroke-width="1" />`+
+				`<text x="%.2f" y="%.2f" font-family="sans-serif" font-size="12" fill="black" dy="-10" text-anchor="middle">%s</text>`,
+				cx, cy, color, cx, cy, p.Method))
+		}
 
 		fullSVG := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" xmlns="http://www.w3.org/2000/svg">
@@ -298,7 +322,7 @@ func saveSVGs(dir string, areas []methods.Area, calcMethods []methods.Calculatio
 	%s
 	%s
 	%s
-</svg>`, width, height, width, height, baseSVG, methodSVG, markerSVG)
+</svg>`, width, height, width, height, baseSVG, methodSVG, markers.String())
 
 		filename := filepath.Join(dir, fmt.Sprintf("%s.svg", method.Name()))
 		os.WriteFile(filename, []byte(fullSVG), 0644)

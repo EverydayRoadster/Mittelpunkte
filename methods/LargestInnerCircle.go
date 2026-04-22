@@ -13,14 +13,14 @@ type LargestInnerCircle struct{}
 
 func (m LargestInnerCircle) Name() string { return "LargestInnerCircle" }
 
-func (m LargestInnerCircle) Calculate(areas []Area) Point {
+func (m LargestInnerCircle) Calculate(areas []Area) []Point {
 	minLat, maxLat, minLon, maxLon := GetBoundingBox(areas)
 
 	width := maxLon - minLon
 	height := maxLat - minLat
 	cellSize := math.Max(width, height)
 	if cellSize == 0 {
-		return Point{}
+		return nil
 	}
 
 	// Initial best point: centroid of the bounding box if it's inside, 
@@ -132,10 +132,14 @@ func (m LargestInnerCircle) Calculate(areas []Area) Point {
 		res.Elevation = sumElev / float64(countElev)
 	}
 	res.Method = m.Name()
-	return res
+	return []Point{res}
 }
 
-func (m LargestInnerCircle) SVG(areas []Area, p Point, t SVGTransformer) string {
+func (m LargestInnerCircle) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
+	p := points[0]
 	radius := DistanceToBoundary(p, areas)
 	cx, cy := t.Project(p)
 	rx := t.ProjectRadiusX(radius, p)

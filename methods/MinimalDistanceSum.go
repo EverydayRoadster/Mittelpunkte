@@ -13,7 +13,7 @@ type MinimalDistanceSum struct{}
 
 func (m MinimalDistanceSum) Name() string { return "MinimalDistanceSum" }
 
-func (m MinimalDistanceSum) Calculate(areas []Area) Point {
+func (m MinimalDistanceSum) Calculate(areas []Area) []Point {
 	var points []Point
 	sumElev := 0.0
 	for _, a := range areas {
@@ -26,7 +26,7 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 	}
 
 	if len(points) == 0 {
-		return Point{}
+		return nil
 	}
 
 	avgElev := sumElev / float64(len(points))
@@ -86,10 +86,8 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 
 		next := Point{
 			Lat: math.Atan2(nextZ/totalWeight, math.Sqrt(math.Pow(nextX/totalWeight, 2)+math.Pow(nextY/totalWeight, 2))) * 180 / math.Pi,
-			Lon: math.Atan2(ySum/totalWeight, xSum/totalWeight) * 180 / math.Pi, // wait, there was a bug here in original? nextY/totalWeight, nextX/totalWeight
+			Lon: math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi,
 		}
-		// Fixing what looks like a bug in the original file I read earlier if it used ySum/xSum instead of nextY/nextX
-		next.Lon = math.Atan2(nextY/totalWeight, nextX/totalWeight) * 180 / math.Pi
 
 		// Check for convergence (approx 1mm)
 		if curr.DistanceTo(next) < 0.001 {
@@ -102,10 +100,14 @@ func (m MinimalDistanceSum) Calculate(areas []Area) Point {
 
 	curr.Elevation = avgElev
 	curr.Method = m.Name()
-	return curr
+	return []Point{curr}
 }
 
-func (m MinimalDistanceSum) SVG(areas []Area, p Point, t SVGTransformer) string {
+func (m MinimalDistanceSum) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
+	p := points[0]
 	var sb strings.Builder
 	cx, cy := t.Project(p)
 	for _, a := range areas {

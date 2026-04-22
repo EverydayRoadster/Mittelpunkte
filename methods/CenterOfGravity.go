@@ -18,15 +18,15 @@ type CenterOfGravity struct {
 
 func (m CenterOfGravity) Name() string { return "CenterOfGravity" }
 
-func (m CenterOfGravity) Calculate(areas []Area) Point {
+func (m CenterOfGravity) Calculate(areas []Area) []Point {
 	if len(areas) == 0 {
-		return Point{}
+		return nil
 	}
 
 	res := m.Resolution
 	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
-		return Point{Method: m.Name()}
+		return []Point{{Method: m.Name()}}
 	}
 
 	var xSum, ySum, zSum, weightSum float64
@@ -55,14 +55,17 @@ func (m CenterOfGravity) Calculate(areas []Area) Point {
 	hyp := math.Sqrt(x*x + y*y)
 	lat := math.Atan2(z, hyp) * 180 / math.Pi
 
-	return Point{
+	return []Point{{
 		Lat:    lat,
 		Lon:    lon,
 		Method: m.Name(),
-	}
+	}}
 }
 
-func (m CenterOfGravity) SVG(areas []Area, p Point, t SVGTransformer) string {
+func (m CenterOfGravity) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
 	res := m.Resolution
 	gridPoints := GenerateGridPoints(areas, res, "")
 	if len(gridPoints) == 0 {

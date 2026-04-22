@@ -10,7 +10,7 @@ type IntersectionOfOutermost struct{}
 
 func (m IntersectionOfOutermost) Name() string { return "IntersectionOfOutermost" }
 
-func (m IntersectionOfOutermost) Calculate(areas []Area) Point {
+func (m IntersectionOfOutermost) Calculate(areas []Area) []Point {
 	var points []Point
 	for _, a := range areas {
 		for _, part := range a.Parts {
@@ -19,7 +19,7 @@ func (m IntersectionOfOutermost) Calculate(areas []Area) Point {
 	}
 
 	if len(points) == 0 {
-		return Point{}
+		return nil
 	}
 
 	var pMinLat, pMaxLat, pMinLon, pMaxLon Point
@@ -74,22 +74,26 @@ func (m IntersectionOfOutermost) Calculate(areas []Area) Point {
 	res := fromLocal(intersectX, intersectY)
 	res.Elevation = sumElev / float64(len(points))
 	res.Method = m.Name()
-	return res
+	return []Point{res}
 }
 
-func (m IntersectionOfOutermost) SVG(areas []Area, p Point, t SVGTransformer) string {
-	var points []Point
-	for _, a := range areas {
-		for _, part := range a.Parts {
-			points = append(points, part...)
-		}
-	}
+func (m IntersectionOfOutermost) SVG(areas []Area, points []Point, t SVGTransformer) string {
 	if len(points) == 0 {
 		return ""
 	}
+	
+	var allBoundaryPoints []Point
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			allBoundaryPoints = append(allBoundaryPoints, part...)
+		}
+	}
+	if len(allBoundaryPoints) == 0 {
+		return ""
+	}
 	var pMinLat, pMaxLat, pMinLon, pMaxLon Point
-	pMinLat, pMaxLat, pMinLon, pMaxLon = points[0], points[0], points[0], points[0]
-	for _, pt := range points {
+	pMinLat, pMaxLat, pMinLon, pMaxLon = allBoundaryPoints[0], allBoundaryPoints[0], allBoundaryPoints[0], allBoundaryPoints[0]
+	for _, pt := range allBoundaryPoints {
 		if pt.Lat < pMinLat.Lat { pMinLat = pt }
 		if pt.Lat > pMaxLat.Lat { pMaxLat = pt }
 		if pt.Lon < pMinLon.Lon { pMinLon = pt }

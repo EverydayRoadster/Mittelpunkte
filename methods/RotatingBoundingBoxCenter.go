@@ -12,7 +12,7 @@ type RotatingBoundingBoxCenter struct{}
 
 func (m RotatingBoundingBoxCenter) Name() string { return "RotatingBoundingBoxCenter" }
 
-func (m RotatingBoundingBoxCenter) Calculate(areas []Area) Point {
+func (m RotatingBoundingBoxCenter) Calculate(areas []Area) []Point {
 	var points []Point
 	var sumLat, sumLon, sumElev float64
 	for _, a := range areas {
@@ -27,7 +27,7 @@ func (m RotatingBoundingBoxCenter) Calculate(areas []Area) Point {
 	}
 
 	if len(points) == 0 {
-		return Point{}
+		return nil
 	}
 
 	ref := Point{Lat: sumLat / float64(len(points)), Lon: sumLon / float64(len(points))}
@@ -67,7 +67,7 @@ func (m RotatingBoundingBoxCenter) Calculate(areas []Area) Point {
 	res := fromLocal(resX/360.0, resY/360.0)
 	res.Elevation = sumElev / float64(len(points))
 	res.Method = m.Name()
-	return res
+	return []Point{res}
 }
 
 func (m RotatingBoundingBoxCenter) rotatedCenterLocal(points [][2]float64, degree int) (float64, float64) {
@@ -96,23 +96,28 @@ func (m RotatingBoundingBoxCenter) rotatedCenterLocal(points [][2]float64, degre
 	return origX, origY
 }
 
-func (m RotatingBoundingBoxCenter) SVG(areas []Area, p Point, t SVGTransformer) string {
-	var points []Point
+func (m RotatingBoundingBoxCenter) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
+	// p := points[0] // Unused in this method's SVG implementation, but available
+	
+	var allBoundaryPoints []Point
 	var sumLat, sumLon float64
 	for _, a := range areas {
 		for _, part := range a.Parts {
-			points = append(points, part...)
+			allBoundaryPoints = append(allBoundaryPoints, part...)
 			for _, pt := range part {
 				sumLat += pt.Lat
 				sumLon += pt.Lon
 			}
 		}
 	}
-	if len(points) == 0 {
+	if len(allBoundaryPoints) == 0 {
 		return ""
 	}
 	
-	ref := Point{Lat: sumLat / float64(len(points)), Lon: sumLon / float64(len(points))}
+	ref := Point{Lat: sumLat / float64(len(allBoundaryPoints)), Lon: sumLon / float64(len(allBoundaryPoints))}
 	const R = 6371000.0
 	const rad = math.Pi / 180.0
 	toLocal := func(p Point) (float64, float64) {
@@ -137,7 +142,7 @@ func (m RotatingBoundingBoxCenter) SVG(areas []Area, p Point, t SVGTransformer) 
 
 		minX, maxX := math.MaxFloat64, -math.MaxFloat64
 		minY, maxY := math.MaxFloat64, -math.MaxFloat64
-		for _, pt := range points {
+		for _, pt := range allBoundaryPoints {
 			px, py := toLocal(pt)
 			rx := px*cosR - py*sinR
 			ry := px*sinR + py*cosR

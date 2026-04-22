@@ -13,11 +13,11 @@ type FermatPointF1 struct {
 
 func (m FermatPointF1) Name() string { return "FermatPointF1" }
 
-func (m FermatPointF1) Calculate(areas []Area) Point {
+func (m FermatPointF1) Calculate(areas []Area) []Point {
 	res := m.Resolution
 	gridPoints := GenerateGridPoints(areas, res, m.Name())
 	if len(gridPoints) == 0 {
-		return Point{Method: m.Name()}
+		return nil
 	}
 
 	// This is the same problem as MinimalDistanceSum but for the whole area instead of just boundary.
@@ -85,10 +85,14 @@ func (m FermatPointF1) Calculate(areas []Area) Point {
 	UpdateProgress(m.Name()+" (Iter)", iterations, iterations)
 
 	curr.Method = m.Name()
-	return curr
+	return []Point{curr}
 }
 
-func (m FermatPointF1) SVG(areas []Area, p Point, t SVGTransformer) string {
+func (m FermatPointF1) SVG(areas []Area, points []Point, t SVGTransformer) string {
+	if len(points) == 0 {
+		return ""
+	}
+	p := points[0]
 	cx, cy := t.Project(p)
 	return fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="5" fill="none" stroke="cyan" stroke-width="2" />`+
 		`<circle cx="%.2f" cy="%.2f" r="1" fill="cyan" />`, cx, cy, cx, cy)
