@@ -1,6 +1,6 @@
 # Mittelpunkte
 
-**Mittelpunkte** (German for "Centers" or "Midpoints") is a Go-based command-line tool designed to calculate various types of geographical "center points" for areas defined in ESRI Shapefiles. Whether you are looking for the centroid, the point furthest from the boundary, or the point that minimizes travel distance, this tool provides a suite of algorithms to find the "middle" of any polygon.
+**Mittelpunkte** (German for "Centers" or "Midpoints") is a Go-based command-line tool designed to calculate various types of geographical "center points" for areas defined in ESRI Shapefiles. Whether you are looking for the centroid, the point furthest from the boundary, or the middle point of an enclosing rectangle or circle, this tool provides a suite of algorithms to find the "middle" of any polygon.
 
 ## Features
 
@@ -16,7 +16,9 @@
 
 ## Installation
 
-Ensure you have Go installed on your system. You can install the tool directly using:
+Ensure you have Go installed on your system. 
+
+You can install the middlepoints tool directly using:
 
 ```bash
 go install github.com/EverydayRoadster/Mittelpunkte@latest
@@ -34,7 +36,7 @@ This will list all areas found in the Shapefiles (e.g., city or district names).
 
 ### Step 2: Calculate center points
 ```bash
-Mittelpunkte -input ./data/german_shapes -filter "Stuttgart"
+Mittelpunkte -input ./data/german_shapes -output ./output/ -filter "Stuttgart"
 ```
 
 ### Flags
