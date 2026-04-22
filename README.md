@@ -41,12 +41,14 @@ Mittelpunkte -input ./data/german_shapes -filter "Stuttgart"
 
 - `-input`: (Required) Path to the directory containing `.shp` files.
 - `-output`: (Default: `.`) Directory where the results will be saved.
-- `-filter`: A comma-separated list of area names to include. **If omitted, the tool lists available areas and exits.**
-- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Values smaller than 30.0 are automatically adjusted to 30.0 for accuracy and performance. For elevation-based methods (like `ReliefCenterOfGravity`), the resolution may be automatically increased (coarsened) to stay under 16,384 elevation points to limit API queries. Elevation data is cached locally in the `cache/` directory to speed up subsequent runs.
+- `-filter`: A comma-separated list of area names or level-prefixed names to include. **If omitted, the tool lists available areas and exits.**
+  - **Standard**: `-filter "Stuttgart"` matches any area named "Stuttgart" or any level named "Stuttgart".
+  - **Explicit Level**: `-filter "Region::Stuttgart"` matches only the area "Stuttgart" that belongs to the "Region" level. This is useful for resolving naming collisions across different administrative layers.
+- `-resolution`: (Default: `30.0`) Resolution in meters for grid-based methods. Values smaller than 30.0 are automatically adjusted to 30.0 for accuracy and performance. For elevation-based methods (like `ReliefCenterOfGravity` and `ElevationQuartiles`), the resolution may be automatically increased (coarsened) to stay under 16,384 elevation points to limit API queries. Elevation data is cached locally in the `cache/` directory to speed up subsequent runs.
 
 ## Calculation Methods
 
-The tool calculates the following 10 middle points for each selected area:
+The tool calculates the following 11 middle points for each selected area:
 
 1.  **BoundingBoxCenter**: The arithmetic mean of the minimum and maximum latitudes and longitudes.
 2.  **IntersectionOfOutermost**: The intersection point of the lines connecting the extreme North-South and East-West points.
@@ -55,9 +57,10 @@ The tool calculates the following 10 middle points for each selected area:
 5.  **RotatingBoundingBoxCenter**: The average center point of bounding boxes calculated at 1-degree rotation intervals.
 6.  **MinimalDistanceSumEqualSpaced**: Similar to MinimalDistanceSum, but uses points sampled at equal 10-meter intervals along the boundary.
 7.  **ReliefCenterOfGravity**: A 3D center of gravity that takes the terrain's surface area into account (requires internet access to fetch elevation data, cached locally).
-8.  **FermatPointF1**: The point inside the area that minimizes the sum of distances to all other points within the area.
-9.  **SmallestEnclosingCircle**: The center of the smallest circle that completely contains all boundary points of the area.
-10. **LargestInnerCircle**: The center of the largest circle that can be inscribed within the shape (Pole of Inaccessibility).
+8.  **ElevationQuartiles**: Computes three middle points based on the Q1, Q2 (Median), and Q3 elevation quartiles of the area. It averages the coordinates of all points within 0.5m of each quartile elevation to provide insights into the landscape's distribution.
+9.  **FermatPointF1**: The point inside the area that minimizes the sum of distances to all other points within the area.
+10. **SmallestEnclosingCircle**: The center of the smallest circle that completely contains all boundary points of the area.
+11. **LargestInnerCircle**: The center of the largest circle that can be inscribed within the shape (Pole of Inaccessibility).
 
 ## Output
 
