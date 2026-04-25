@@ -3,6 +3,7 @@ package methods
 import (
 	"fmt"
 	"math"
+	"strings"
 )
 
 // FermatPointF1 calculates the point that minimizes the sum of great-circle distances 
@@ -94,6 +95,27 @@ func (m FermatPointF1) SVG(areas []Area, points []Point, t SVGTransformer) strin
 	}
 	p := points[0]
 	cx, cy := t.Project(p)
-	return fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="5" fill="none" stroke="cyan" stroke-width="2" />`+
-		`<circle cx="%.2f" cy="%.2f" r="1" fill="cyan" />`, cx, cy, cx, cy)
+
+	var sb strings.Builder
+
+	// Use a sparse grid for visualization
+	res := m.Resolution
+	if res == 0 {
+		res = 3000
+	}
+	gridPoints := GenerateGridPoints(areas, res*5, "") // 5x coarser for visual lines
+
+	for _, gp := range gridPoints {
+		gx, gy := t.Project(gp)
+		// Draw a small box (representing area mass)
+		sb.WriteString(fmt.Sprintf(`<rect x="%.2f" y="%.2f" width="2" height="2" fill="cyan" fill-opacity="0.4" />`,
+			gx-1, gy-1))
+		// Draw a line connecting to the Fermat point
+		sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="cyan" stroke-width="0.3" stroke-opacity="0.2" />`,
+			gx, gy, cx, cy))
+	}
+
+	sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="5" fill="none" stroke="cyan" stroke-width="2" />`+
+		`<circle cx="%.2f" cy="%.2f" r="1" fill="cyan" />`, cx, cy, cx, cy))
+	return sb.String()
 }

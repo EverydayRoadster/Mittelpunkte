@@ -110,12 +110,33 @@ func (m MinimalDistanceSum) SVG(areas []Area, points []Point, t SVGTransformer) 
 	p := points[0]
 	var sb strings.Builder
 	cx, cy := t.Project(p)
+
+	// Count total vertices to determine stride
+	totalVertices := 0
 	for _, a := range areas {
 		for _, part := range a.Parts {
-			for i, pt := range part {
-				if i%5 != 0 { continue }
-				px, py := t.Project(pt)
-				sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`, cx, cy, px, py))
+			totalVertices += len(part)
+		}
+	}
+	stride := 1
+	if totalVertices > 100 {
+		stride = totalVertices / 100
+	}
+
+	count := 0
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			for _, pt := range part {
+				if count%stride == 0 {
+					px, py := t.Project(pt)
+					// Lines to vertices
+					sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="grey" stroke-width="0.5" stroke-opacity="0.3" />`,
+						cx, cy, px, py))
+					// Markers at vertices
+					sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="1.5" fill="grey" fill-opacity="0.5" />`,
+						px, py))
+				}
+				count++
 			}
 		}
 	}

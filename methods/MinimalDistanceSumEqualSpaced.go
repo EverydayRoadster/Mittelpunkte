@@ -139,33 +139,57 @@ func (m MinimalDistanceSumEqualSpaced) SVG(areas []Area, points []Point, t SVGTr
 	var sb strings.Builder
 	cx, cy := t.Project(p)
 	
-	// Collect boundary points for visualization
-	var boundaryPoints []Point
+	// Calculate total perimeter to determine optimal visual spacing for ~100 points
+	totalPerimeter := 0.0
+	for _, a := range areas {
+		for _, part := range a.Parts {
+			for i := 0; i < len(part); i++ {
+				totalPerimeter += part[i].DistanceTo(part[(i+1)%len(part)])
+			}
+		}
+	}
+	
+	visualSpacing := totalPerimeter / 100.0
+	if visualSpacing < 1.0 { visualSpacing = 1.0 }
+
+	distSinceLastPoint := visualSpacing // Ensure we draw the very first point
 	for _, a := range areas {
 		for _, part := range a.Parts {
 			for i := 0; i < len(part); i++ {
 				p1 := part[i]
 				p2 := part[(i+1)%len(part)]
 				d := p1.DistanceTo(p2)
-				boundaryPoints = append(boundaryPoints, p1)
-				if d > 200 { 
-					steps := int(d / 200)
-					for s := 1; s <= steps; s++ {
-						frac := float64(s) / (d / 200)
-						boundaryPoints = append(boundaryPoints, Point{
-							Lat: p1.Lat + (p2.Lat-p1.Lat)*frac,
-							Lon: p1.Lon + (p2.Lon-p1.Lon)*frac,
-						})
+				
+				distSinceLastPoint += d
+				
+				// Draw points as long as we have enough accumulated distance
+				for distSinceLastPoint >= visualSpacing {
+					// How far along this segment is the next point?
+					// d is the full segment length. 
+					// distSinceLastPoint - d was the distance before this segment.
+					// We want the point at (visualSpacing - (distSinceLastPoint - d)) from p1.
+					needed := visualSpacing - (distSinceLastPoint - d)
+					frac := 0.0
+					if d > 0 {
+						frac = needed / d
 					}
+					
+					pt := Point{
+						Lat: p1.Lat + (p2.Lat-p1.Lat)*frac,
+						Lon: p1.Lon + (p2.Lon-p1.Lon)*frac,
+					}
+					px, py := t.Project(pt)
+					
+					sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="green" stroke-width="0.4" stroke-opacity="0.25" />`, 
+						cx, cy, px, py))
+					sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="1.0" fill="green" fill-opacity="0.6" />`, 
+						px, py))
+					
+					distSinceLastPoint -= visualSpacing
 				}
 			}
 		}
 	}
 
-	for i, pt := range boundaryPoints {
-		if i%10 != 0 { continue }
-		px, py := t.Project(pt)
-		sb.WriteString(fmt.Sprintf(`<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="green" stroke-width="0.3" stroke-opacity="0.2" />`, cx, cy, px, py))
-	}
 	return sb.String()
 }

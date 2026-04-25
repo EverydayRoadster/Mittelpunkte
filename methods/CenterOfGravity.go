@@ -66,6 +66,9 @@ func (m CenterOfGravity) SVG(areas []Area, points []Point, t SVGTransformer) str
 	if len(points) == 0 {
 		return ""
 	}
+	p := points[0]
+	cx, cy := t.Project(p)
+
 	res := m.Resolution
 	gridPoints := GenerateGridPoints(areas, res, "")
 	if len(gridPoints) == 0 {
@@ -73,11 +76,26 @@ func (m CenterOfGravity) SVG(areas []Area, points []Point, t SVGTransformer) str
 	}
 
 	var sb strings.Builder
+
+	// Draw gravitational waves
+	// We'll draw 5 concentric circles representing equal distances
+	for i := 1; i <= 5; i++ {
+		// Use a representative distance (e.g., 5km, 10km...) based on area size could be better,
+		// but 10km steps are often reasonable for countries.
+		// Let's try to scale it to the area.
+		dist := float64(i) * 10000 // 10km, 20km...
+		rSVG := t.ProjectRadius(dist, p)
+		sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="%.2f" fill="none" stroke="blue" stroke-width="0.5" stroke-opacity="%.2f" stroke-dasharray="5,5" />`,
+			cx, cy, rSVG, 0.5-float64(i)*0.08))
+	}
+
 	for i, gp := range gridPoints {
-		// Limit to ~1000 dots for performance
-		if len(gridPoints) > 1000 && i%(len(gridPoints)/1000) != 0 { continue }
+		// Limit to ~800 dots for performance and visual clarity
+		if len(gridPoints) > 800 && i%(len(gridPoints)/800) != 0 {
+			continue
+		}
 		x, y := t.Project(gp)
-		sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="1" fill="blue" fill-opacity="0.3" />`, x, y))
+		sb.WriteString(fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="0.8" fill="blue" fill-opacity="0.15" />`, x, y))
 	}
 	return sb.String()
 }
